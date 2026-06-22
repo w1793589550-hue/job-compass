@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: job-compass
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: SEARCH_PROVIDER
+        value: tavily
+      - key: DEEPSEEK_MODEL
+        value: deepseek-v4-flash
+      - key: SEARCH_MAX_RESULTS
+        value: "12"
+      - key: SOURCE_VERIFICATION_LIMIT
+        value: "36"
+      - key: DAILY_TAVILY_CREDIT_QUOTA
+        value: "40"
+      - key: TAVILY_CREDIT_COST_CNY
+        value: "0.213378"
+      - key: DEEPSEEK_INPUT_CACHE_HIT_CNY_PER_MILLION
+        value: "0.2"
+      - key: DEEPSEEK_INPUT_CACHE_MISS_CNY_PER_MILLION
+        value: "2"
+      - key: DEEPSEEK_OUTPUT_CNY_PER_MILLION
+        value: "3"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "600000"
+      - key: GENERATE_RATE_LIMIT
+        value: "6"
+      - key: RESUME_RATE_LIMIT
+        value: "12"
+      - key: ADMIN_SESSION_TTL_MS
+        value: "43200000"
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
