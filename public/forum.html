@@ -109,7 +109,13 @@
           <form id="forumPostForm" class="forum-form">
             <label>
               <span>话题</span>
-              <input id="forumTopic" type="text" maxlength="20" value="求职交流" />
+              <select id="forumTopic">
+                <option value="求职交流">求职交流</option>
+                <option value="公司核验">公司核验</option>
+                <option value="面试经验">面试经验</option>
+                <option value="入职避坑">入职避坑</option>
+                <option value="薪资福利">薪资福利</option>
+              </select>
             </label>
             <label>
               <span>标题</span>
@@ -134,6 +140,44 @@
           </div>
           <button class="quiet-button" id="forumRefresh" type="button">刷新</button>
         </div>
+        <div class="forum-summary-strip" id="forumSummary" hidden></div>
+        <form class="forum-filter-bar" id="forumFilterForm">
+          <label>
+            <span>关键词</span>
+            <input id="forumSearch" type="search" maxlength="60" placeholder="搜公司、岗位、面试关键词" />
+          </label>
+          <label>
+            <span>话题</span>
+            <select id="forumTopicFilter">
+              <option value="">全部话题</option>
+              <option value="求职交流">求职交流</option>
+              <option value="公司核验">公司核验</option>
+              <option value="面试经验">面试经验</option>
+              <option value="入职避坑">入职避坑</option>
+              <option value="薪资福利">薪资福利</option>
+            </select>
+          </label>
+          <label>
+            <span>身份</span>
+            <select id="forumRoleFilter">
+              <option value="">全部身份</option>
+              <option value="candidate">求职者</option>
+              <option value="employee">被雇佣者 / 在职者</option>
+              <option value="boss">老板 / HR</option>
+              <option value="observer">旁观交流者</option>
+            </select>
+          </label>
+          <label id="forumStatusFilterWrap" hidden>
+            <span>状态</span>
+            <select id="forumStatusFilter">
+              <option value="">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="approved">已公开</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+          </label>
+          <button class="quiet-button" type="submit">筛选</button>
+        </form>
         <div class="forum-empty" id="forumEmpty" hidden>
           <strong>还没有公开讨论</strong>
           <span>可以先发布一个话题，等待管理员审核。</span>

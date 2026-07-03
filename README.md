@@ -171,8 +171,8 @@ RESUME_RATE_LIMIT=12
 调用、访问统计都应通过线上地址使用。
 
 注意：Render 免费 Web Service 的运行时文件写入不适合长期保存数据。当前
-`data/analytics.json` 和 `data/usage.json` 在服务重启或重新部署后可能丢失。
-如果要长期保存浏览统计，需要接 Render Disk 或改为数据库。
+`data/analytics.json`、`data/usage.json` 和 `data/forum.json` 在服务重启或重新部署后可能丢失。
+如果要长期保存浏览统计和论坛内容，需要接 Render Disk 或改为数据库。
 
 ## 论坛功能
 
@@ -186,9 +186,12 @@ RESUME_RATE_LIMIT=12
 
 - 手机号 + 密码注册和登录；
 - 用户身份选择：求职者、被雇佣者 / 在职者、老板 / HR、旁观交流者；
-- 发帖和评论；
+- 发帖、评论、按话题/身份/关键词筛选；
+- 话题分类：求职交流、公司核验、面试经验、入职避坑、薪资福利；
 - 所有帖子、评论默认进入“待审核”；
-- 管理员登录后可在论坛页面直接批准或拒绝待审核内容；
+- 用户可举报已经公开的帖子或评论，避免不当内容长期暴露；
+- 管理员登录后可在论坛页面直接批准或拒绝待审核内容，并查看待审/举报统计；
+- 注册、登录、发帖、评论和举报接口都有独立限流，适合公网演示；
 - 手机号不会明文写入 `data/forum.json`，服务端只保存手机号哈希和脱敏号码。
 
 论坛相关接口：
@@ -201,7 +204,17 @@ POST /api/forum/logout
 GET  /api/forum/posts
 POST /api/forum/posts
 POST /api/forum/posts/:id/comments
+POST /api/forum/reports
 POST /api/forum/moderation
+```
+
+`GET /api/forum/posts` 支持以下查询参数：
+
+```text
+q=关键词
+topic=求职交流|公司核验|面试经验|入职避坑|薪资福利
+role=candidate|employee|boss|observer
+status=pending|approved|rejected  # 仅管理员模式生效
 ```
 
 论坛当前使用本地 JSON 文件持久化：
@@ -218,4 +231,7 @@ data/forum.json
 FORUM_SESSION_SECRET=一段足够长的随机字符串
 FORUM_SESSION_TTL_MS=2592000000
 FORUM_PHONE_HASH_SECRET=用于手机号哈希的随机字符串
+FORUM_AUTH_RATE_LIMIT=20
+FORUM_POST_RATE_LIMIT=10
+FORUM_REPORT_RATE_LIMIT=12
 ```

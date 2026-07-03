@@ -13,12 +13,18 @@ const elements = {
   accountCard: document.querySelector("#forumAccountCard"),
   adminPassword: document.querySelector("#forumAdminPassword"),
   adminLogin: document.querySelector("#forumAdminLogin"),
-  postForm: document.querySelector("#forumPostForm"),
   topic: document.querySelector("#forumTopic"),
   title: document.querySelector("#forumTitle"),
   body: document.querySelector("#forumBody"),
   submitPost: document.querySelector("#forumSubmitPost"),
   refresh: document.querySelector("#forumRefresh"),
+  summary: document.querySelector("#forumSummary"),
+  filterForm: document.querySelector("#forumFilterForm"),
+  search: document.querySelector("#forumSearch"),
+  topicFilter: document.querySelector("#forumTopicFilter"),
+  roleFilter: document.querySelector("#forumRoleFilter"),
+  statusFilter: document.querySelector("#forumStatusFilter"),
+  statusFilterWrap: document.querySelector("#forumStatusFilterWrap"),
   empty: document.querySelector("#forumEmpty"),
   postList: document.querySelector("#forumPostList"),
   toast: document.querySelector("#forumToast"),
@@ -32,7 +38,8 @@ function escapeHtml(value) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function roleLabel(role) {
@@ -73,7 +80,7 @@ async function requestJson(url, options = {}) {
 }
 
 function renderSession() {
-  adminMode = Boolean(adminMode);
+  elements.statusFilterWrap.hidden = !adminMode;
   if (currentUser) {
     elements.sessionPill.textContent = `${currentUser.displayName} · ${roleLabel(currentUser.role)}${adminMode ? " · 管理员" : ""}`;
     elements.authForm.hidden = true;
@@ -93,6 +100,44 @@ function renderSession() {
   }
 }
 
+function renderSummary(summary) {
+  if (!summary) {
+    elements.summary.hidden = true;
+    elements.summary.replaceChildren();
+    return;
+  }
+  const stats = [
+    ["可见主题", summary.visiblePosts || 0],
+    ["已公开", summary.approvedPosts || 0],
+    ["待审帖子", summary.pendingPosts || 0],
+    ["待审评论", summary.pendingComments || 0],
+    ["未处理举报", summary.openReports || 0],
+  ];
+  if (adminMode && Number.isInteger(summary.totalUsers)) stats.push(["注册用户", summary.totalUsers]);
+  elements.summary.innerHTML = stats.map(([label, value]) => `
+    <span><strong>${escapeHtml(value)}</strong>${escapeHtml(label)}</span>
+  `).join("");
+  elements.summary.hidden = false;
+}
+
+function reportButton(type, id, authorId) {
+  if (!currentUser || currentUser.id === authorId) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "forum-link-button";
+  button.textContent = "举报";
+  button.addEventListener("click", () => reportContent(type, id));
+  return button;
+}
+
+function appendAdminReportCount(container, count) {
+  if (!adminMode || !count) return;
+  const badge = document.createElement("span");
+  badge.className = "forum-report-badge";
+  badge.textContent = `举报 ${count}`;
+  container.append(badge);
+}
+
 function renderPosts(posts) {
   elements.postList.replaceChildren();
   elements.empty.hidden = posts.length > 0;
@@ -109,12 +154,17 @@ function renderPosts(posts) {
         <span class="forum-status">${escapeHtml(statusLabel(post.status))}</span>
       </div>
       <p>${escapeHtml(post.body)}</p>
-      <div class="forum-meta">
+      <div class="forum-meta forum-post-meta">
         <span>${escapeHtml(post.author.displayName)} · ${escapeHtml(roleLabel(post.author.role))}</span>
         <span>${new Date(post.createdAt).toLocaleString("zh-CN")}</span>
       </div>
       <div class="forum-comments"></div>
     `;
+
+    const meta = article.querySelector(".forum-post-meta");
+    appendAdminReportCount(meta, post.reportCount);
+    const postReport = post.status === "approved" ? reportButton("post", post.id, post.author.id) : null;
+    if (postReport) meta.append(postReport);
 
     const commentBox = article.querySelector(".forum-comments");
     comments.forEach((comment) => {
@@ -122,11 +172,17 @@ function renderPosts(posts) {
       item.className = `forum-comment status-${comment.status}`;
       item.innerHTML = `
         <p>${escapeHtml(comment.body)}</p>
-        <div class="forum-meta">
+        <div class="forum-meta forum-comment-meta">
           <span>${escapeHtml(comment.author.displayName)} · ${escapeHtml(roleLabel(comment.author.role))}</span>
           <span>${escapeHtml(statusLabel(comment.status))}</span>
         </div>
       `;
+      const commentMeta = item.querySelector(".forum-comment-meta");
+      appendAdminReportCount(commentMeta, comment.reportCount);
+      const commentReport = comment.status === "approved"
+        ? reportButton("comment", comment.id, comment.author.id)
+        : null;
+      if (commentReport) commentMeta.append(commentReport);
       if (adminMode && comment.status === "pending") {
         item.append(moderationActions("comment", comment.id));
       }
@@ -183,16 +239,44 @@ function moderationActions(type, id) {
 }
 
 async function moderate(type, id, status) {
+  const reason = status === "rejected"
+    ? window.prompt("可以填写拒绝原因，留空也可以：", "")
+    : "";
   try {
     await requestJson("/api/forum/moderation", {
       method: "POST",
-      body: JSON.stringify({ type, id, status }),
+      body: JSON.stringify({ type, id, status, reason }),
     });
     showToast(status === "approved" ? "已通过" : "已拒绝");
     await loadPosts();
   } catch (error) {
     showToast(error.message);
   }
+}
+
+async function reportContent(type, id) {
+  const reason = window.prompt("请简单说明举报原因，例如：泄露隐私、攻击辱骂、广告引流。", "");
+  if (reason === null) return;
+  try {
+    await requestJson("/api/forum/reports", {
+      method: "POST",
+      body: JSON.stringify({ type, id, reason }),
+    });
+    showToast("举报已提交");
+    await loadPosts();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function buildPostUrl() {
+  const params = new URLSearchParams();
+  if (elements.search.value.trim()) params.set("q", elements.search.value.trim());
+  if (elements.topicFilter.value) params.set("topic", elements.topicFilter.value);
+  if (elements.roleFilter.value) params.set("role", elements.roleFilter.value);
+  if (adminMode && elements.statusFilter.value) params.set("status", elements.statusFilter.value);
+  const suffix = params.toString();
+  return suffix ? `/api/forum/posts?${suffix}` : "/api/forum/posts";
 }
 
 async function loadSession() {
@@ -203,10 +287,11 @@ async function loadSession() {
 }
 
 async function loadPosts() {
-  const data = await requestJson("/api/forum/posts");
+  const data = await requestJson(buildPostUrl());
   currentUser = data.user || currentUser;
   adminMode = Boolean(data.adminMode);
   renderSession();
+  renderSummary(data.summary);
   renderPosts(data.posts || []);
 }
 
@@ -273,6 +358,13 @@ elements.submitPost.addEventListener("click", async () => {
 });
 
 elements.refresh.addEventListener("click", loadPosts);
+elements.filterForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await loadPosts();
+});
+elements.search.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") event.preventDefault();
+});
 
 await loadSession();
 await loadPosts();

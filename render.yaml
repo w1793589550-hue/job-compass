@@ -34,6 +34,12 @@ services:
         value: "6"
       - key: RESUME_RATE_LIMIT
         value: "12"
+      - key: FORUM_AUTH_RATE_LIMIT
+        value: "20"
+      - key: FORUM_POST_RATE_LIMIT
+        value: "10"
+      - key: FORUM_REPORT_RATE_LIMIT
+        value: "12"
       - key: ADMIN_SESSION_TTL_MS
         value: "43200000"
       - key: DEEPSEEK_API_KEY
@@ -43,4 +49,8 @@ services:
       - key: ADMIN_PASSWORD_HASH
         sync: false
       - key: ADMIN_SESSION_SECRET
+        generateValue: true
+      - key: FORUM_SESSION_SECRET
+        generateValue: true
+      - key: FORUM_PHONE_HASH_SECRET
         generateValue: true

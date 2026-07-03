@@ -108,7 +108,11 @@ const rateWindowMs = Math.max(10_000, Number(process.env.RATE_LIMIT_WINDOW_MS ||
 const rateLimits = {
   generate: Math.max(1, Number(process.env.GENERATE_RATE_LIMIT || 6)),
   resume: Math.max(1, Number(process.env.RESUME_RATE_LIMIT || 12)),
+  forumAuth: Math.max(1, Number(process.env.FORUM_AUTH_RATE_LIMIT || 20)),
+  forumPost: Math.max(1, Number(process.env.FORUM_POST_RATE_LIMIT || 10)),
+  forumReport: Math.max(1, Number(process.env.FORUM_REPORT_RATE_LIMIT || 12)),
 };
+const forumTopics = new Set(["求职交流", "公司核验", "面试经验", "入职避坑", "薪资福利"]);
 const sourceVerificationLimit = Math.min(
   60,
   Math.max(4, Number(process.env.SOURCE_VERIFICATION_LIMIT || 36)),
@@ -276,6 +280,22 @@ function normalizeForumRole(role) {
   return ["boss", "employee", "candidate", "observer"].includes(role) ? role : "candidate";
 }
 
+function normalizeForumTopic(topic) {
+  return forumTopics.has(topic) ? topic : "求职交流";
+}
+
+function forumFiltersFromUrl(url, admin = false) {
+  const status = String(url.searchParams.get("status") || "").trim();
+  return {
+    topic: forumTopics.has(url.searchParams.get("topic")) ? url.searchParams.get("topic") : "",
+    role: ["boss", "employee", "candidate", "observer"].includes(url.searchParams.get("role"))
+      ? url.searchParams.get("role")
+      : "",
+    status: admin && ["pending", "approved", "rejected"].includes(status) ? status : "",
+    q: String(url.searchParams.get("q") || "").trim().slice(0, 60),
+  };
+}
+
 async function loadAnalytics() {
   try {
     return JSON.parse(await readFile(analyticsFilePath, "utf8"));
@@ -391,10 +411,12 @@ function clientIpFromRequest(req) {
   return req.socket.remoteAddress || "unknown";
 }
 
-function enforceRateLimit(req, res, action, clientId) {
+function enforceRateLimitKey(req, res, action, discriminator = "") {
+  const limit = rateLimits[action];
+  if (!limit) return true;
   const result = rateLimiter.check(
-    `${action}:${clientIpFromRequest(req)}:${clientId}`,
-    { limit: rateLimits[action], windowMs: rateWindowMs },
+    `${action}:${clientIpFromRequest(req)}:${discriminator}`,
+    { limit, windowMs: rateWindowMs },
   );
   if (result.allowed) return true;
   sendJson(res, 429, {
@@ -407,6 +429,10 @@ function enforceRateLimit(req, res, action, clientId) {
     "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
   });
   return false;
+}
+
+function enforceRateLimit(req, res, action, clientId) {
+  return enforceRateLimitKey(req, res, action, clientId);
 }
 
 async function consumeTavilyQuota(res, clientId, credits) {
@@ -1283,6 +1309,7 @@ const server = createServer(async (req, res) => {
         ok: true,
         user: forumStore.publicUser(user),
         adminMode: isAdminRequest(req),
+        topics: [...forumTopics],
       });
     }
 
@@ -1290,6 +1317,7 @@ const server = createServer(async (req, res) => {
       try {
         const body = await readBody(req, 30_000);
         const phone = normalizePhone(body.phone);
+        if (!enforceRateLimitKey(req, res, "forumAuth", phone || "anonymous")) return;
         if (!phone) return sendJson(res, 400, { error: "请输入有效的 11 位手机号。" });
         const password = String(body.password || "");
         if (password.length < 6 || password.length > 72) {
@@ -1322,6 +1350,8 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/api/forum/login") {
       const body = await readBody(req, 20_000);
+      const phone = normalizePhone(body.phone);
+      if (!enforceRateLimitKey(req, res, "forumAuth", phone || "anonymous")) return;
       const user = await forumStore.userByPhone(body.phone);
       if (!user || user.disabled || !verifyPasswordHash(body.password, user.passwordHash)) {
         return sendJson(res, 401, { error: "手机号或密码不正确。" });
@@ -1349,14 +1379,18 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/forum/posts") {
       const user = await forumUserFromRequest(req);
+      const adminMode = isAdminRequest(req);
       const posts = await forumStore.list({
         viewerId: user?.id || "",
-        admin: isAdminRequest(req),
+        admin: adminMode,
+        filters: forumFiltersFromUrl(url, adminMode),
       });
       return sendJson(res, 200, {
         ok: true,
         user: forumStore.publicUser(user),
-        adminMode: isAdminRequest(req),
+        adminMode,
+        topics: [...forumTopics],
+        summary: await forumStore.summary({ viewerId: user?.id || "", admin: adminMode }),
         posts,
       });
     }
@@ -1364,12 +1398,13 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/forum/posts") {
       const user = await forumUserFromRequest(req);
       if (!user) return sendJson(res, 401, { error: "请先用手机号登录后再发帖。" });
+      if (!enforceRateLimitKey(req, res, "forumPost", user.id)) return;
       try {
         const body = await readBody(req, 80_000);
         const post = await forumStore.createPost(user, {
           title: cleanForumText(body.title, { min: 4, max: 60, label: "标题" }),
           body: cleanForumText(body.body, { min: 10, max: 2000, label: "正文" }),
-          topic: cleanForumText(body.topic || "求职交流", { min: 2, max: 20, label: "话题" }),
+          topic: normalizeForumTopic(body.topic),
         });
         return sendJson(res, 201, {
           ok: true,
@@ -1385,6 +1420,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && commentMatch) {
       const user = await forumUserFromRequest(req);
       if (!user) return sendJson(res, 401, { error: "请先用手机号登录后再评论。" });
+      if (!enforceRateLimitKey(req, res, "forumPost", user.id)) return;
       try {
         const body = await readBody(req, 40_000);
         const comment = await forumStore.createComment(user, commentMatch[1], {
@@ -1397,6 +1433,27 @@ const server = createServer(async (req, res) => {
         });
       } catch (error) {
         return sendJson(res, 400, { error: error.message || "评论失败。" });
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/reports") {
+      const user = await forumUserFromRequest(req);
+      if (!user) return sendJson(res, 401, { error: "请先登录后再举报。" });
+      if (!enforceRateLimitKey(req, res, "forumReport", user.id)) return;
+      try {
+        const body = await readBody(req, 20_000);
+        const report = await forumStore.createReport(user, {
+          type: body.type,
+          id: String(body.id || ""),
+          reason: cleanForumText(body.reason, { min: 4, max: 180, label: "举报原因" }),
+        });
+        return sendJson(res, 201, {
+          ok: true,
+          report,
+          message: "举报已提交，管理员会结合上下文处理。",
+        });
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message || "举报失败。" });
       }
     }
 

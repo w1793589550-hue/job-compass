@@ -86,3 +86,74 @@ test("forum posts and comments stay pending until an admin approves them", async
 
   await rm(dir, { recursive: true, force: true });
 });
+
+test("forum supports filters, summaries, and report resolution", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "job-compass-forum-"));
+  const filePath = join(dir, "forum.json");
+  let id = 0;
+  const store = new ForumStore({
+    filePath,
+    phoneHashSecret: "test-secret",
+    now: () => new Date("2026-07-03T08:00:00.000Z"),
+    idFactory: () => `id-${++id}`,
+  });
+
+  await store.createUser({
+    phone: "13700137000",
+    passwordHash: "hash",
+    displayName: "求职同学",
+    role: "candidate",
+  });
+  await store.createUser({
+    phone: "13600136000",
+    passwordHash: "hash",
+    displayName: "HR小王",
+    role: "boss",
+  });
+  const candidate = await store.userByPhone("13700137000");
+  const boss = await store.userByPhone("13600136000");
+
+  const post = await store.createPost(candidate, {
+    title: "这家公司校招流程真实吗",
+    body: "我想核验这家公司的校招流程和薪资福利描述是否一致。",
+    topic: "公司核验",
+  });
+  await store.moderate({ type: "post", id: post.id, status: "approved" });
+
+  assert.equal((await store.list({ filters: { topic: "公司核验" } })).length, 1);
+  assert.equal((await store.list({ filters: { topic: "面试经验" } })).length, 0);
+  assert.equal((await store.list({ filters: { q: "薪资福利" } })).length, 1);
+  assert.equal((await store.list({ filters: { role: "candidate" } })).length, 1);
+  await assert.rejects(
+    () => store.createReport(candidate, {
+      type: "post",
+      id: post.id,
+      reason: "举报自己的内容",
+    }),
+    /不能举报自己/,
+  );
+
+  const report = await store.createReport(boss, {
+    type: "post",
+    id: post.id,
+    reason: "内容需要管理员核对来源",
+  });
+  assert.equal(report.status, "open");
+  await assert.rejects(
+    () => store.createReport(boss, {
+      type: "post",
+      id: post.id,
+      reason: "重复举报",
+    }),
+    /已经举报过/,
+  );
+
+  const adminList = await store.list({ admin: true });
+  assert.equal(adminList[0].reportCount, 1);
+  assert.equal((await store.summary({ admin: true })).openReports, 1);
+
+  await store.moderate({ type: "post", id: post.id, status: "rejected", reason: "证据不足" });
+  assert.equal((await store.summary({ admin: true })).openReports, 0);
+
+  await rm(dir, { recursive: true, force: true });
+});
