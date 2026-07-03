@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { SlidingWindowRateLimiter } from "./lib/rate-limit.mjs";
 import { UsageStore } from "./lib/usage-store.mjs";
+import { ForumStore, normalizePhone } from "./lib/forum-store.mjs";
 import { verifyEvidenceSources } from "./lib/evidence.mjs";
 import {
   defaultDeepSeekPricing,
@@ -64,6 +65,12 @@ const adminSessionTtlMs = Math.max(
   30 * 60 * 1000,
   Number(process.env.ADMIN_SESSION_TTL_MS || 12 * 60 * 60 * 1000),
 );
+const forumSessionSecret = process.env.FORUM_SESSION_SECRET || adminSessionSecret || randomUUID();
+const forumSessionCookieName = "job_compass_forum";
+const forumSessionTtlMs = Math.max(
+  30 * 60 * 1000,
+  Number(process.env.FORUM_SESSION_TTL_MS || 30 * 24 * 60 * 60 * 1000),
+);
 const deepSeekPricing = {
   inputCacheHitPerMillion: Math.max(0, Number(
     process.env.DEEPSEEK_INPUT_CACHE_HIT_CNY_PER_MILLION
@@ -89,6 +96,10 @@ const usageStore = new UsageStore({
   limits: {
     tavilyCredits: Math.max(1, Number(process.env.DAILY_TAVILY_CREDIT_QUOTA || 40)),
   },
+});
+const forumStore = new ForumStore({
+  filePath: join(root, "data", "forum.json"),
+  phoneHashSecret: process.env.FORUM_PHONE_HASH_SECRET || forumSessionSecret,
 });
 const analyticsFilePath = join(root, "data", "analytics.json");
 let analytics = await loadAnalytics();
@@ -206,6 +217,63 @@ function adminCookie(token, maxAgeSeconds) {
 
 function clearAdminCookie() {
   return `${adminSessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+function signForumSession(payload, secret = forumSessionSecret) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+function verifyForumSession(token, secret = forumSessionSecret, now = Date.now()) {
+  const [body, signature] = String(token || "").split(".");
+  if (!body || !signature || !secret) return null;
+  const expected = createHmac("sha256", secret).update(body).digest("base64url");
+  const provided = Buffer.from(signature, "base64url");
+  const expectedBuffer = Buffer.from(expected, "base64url");
+  if (provided.length !== expectedBuffer.length || !timingSafeEqual(provided, expectedBuffer)) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (payload?.role !== "forum_user" || !payload.userId || Number(payload.exp) <= now) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function forumCookie(token, maxAgeSeconds) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${forumSessionCookieName}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function clearForumCookie() {
+  return `${forumSessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+async function forumUserFromRequest(req) {
+  const payload = verifyForumSession(parseCookies(req)[forumSessionCookieName]);
+  if (!payload) return null;
+  return forumStore.userById(payload.userId);
+}
+
+function hashPassword(password) {
+  const salt = randomUUID().replaceAll("-", "");
+  const saltBuffer = Buffer.from(salt, "hex");
+  const hash = pbkdf2Sync(String(password || ""), saltBuffer, 310_000, 32, "sha256");
+  return `pbkdf2$sha256$310000$${saltBuffer.toString("base64url")}$${hash.toString("base64url")}`;
+}
+
+function cleanForumText(value, { min = 1, max = 200, label = "内容" } = {}) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length < min) throw new Error(`${label}至少需要 ${min} 个字。`);
+  if (text.length > max) throw new Error(`${label}不能超过 ${max} 个字。`);
+  return text;
+}
+
+function normalizeForumRole(role) {
+  return ["boss", "employee", "candidate", "observer"].includes(role) ? role : "candidate";
 }
 
 async function loadAnalytics() {
@@ -1207,6 +1275,145 @@ const server = createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, adminMode: false }, {
         "Set-Cookie": clearAdminCookie(),
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/forum/session") {
+      const user = await forumUserFromRequest(req);
+      return sendJson(res, 200, {
+        ok: true,
+        user: forumStore.publicUser(user),
+        adminMode: isAdminRequest(req),
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/register") {
+      try {
+        const body = await readBody(req, 30_000);
+        const phone = normalizePhone(body.phone);
+        if (!phone) return sendJson(res, 400, { error: "请输入有效的 11 位手机号。" });
+        const password = String(body.password || "");
+        if (password.length < 6 || password.length > 72) {
+          return sendJson(res, 400, { error: "密码长度需要在 6 到 72 位之间。" });
+        }
+        const displayName = cleanForumText(body.displayName, { min: 2, max: 20, label: "昵称" });
+        const user = await forumStore.createUser({
+          phone,
+          passwordHash: hashPassword(password),
+          displayName,
+          role: normalizeForumRole(body.role),
+        });
+        const now = Date.now();
+        const token = signForumSession({
+          role: "forum_user",
+          userId: user.id,
+          iat: now,
+          exp: now + forumSessionTtlMs,
+        });
+        return sendJson(res, 201, {
+          ok: true,
+          user,
+        }, {
+          "Set-Cookie": forumCookie(token, Math.floor(forumSessionTtlMs / 1000)),
+        });
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message || "注册失败。" });
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/login") {
+      const body = await readBody(req, 20_000);
+      const user = await forumStore.userByPhone(body.phone);
+      if (!user || user.disabled || !verifyPasswordHash(body.password, user.passwordHash)) {
+        return sendJson(res, 401, { error: "手机号或密码不正确。" });
+      }
+      const now = Date.now();
+      const token = signForumSession({
+        role: "forum_user",
+        userId: user.id,
+        iat: now,
+        exp: now + forumSessionTtlMs,
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        user: forumStore.publicUser(user),
+      }, {
+        "Set-Cookie": forumCookie(token, Math.floor(forumSessionTtlMs / 1000)),
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/logout") {
+      return sendJson(res, 200, { ok: true, user: null }, {
+        "Set-Cookie": clearForumCookie(),
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/forum/posts") {
+      const user = await forumUserFromRequest(req);
+      const posts = await forumStore.list({
+        viewerId: user?.id || "",
+        admin: isAdminRequest(req),
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        user: forumStore.publicUser(user),
+        adminMode: isAdminRequest(req),
+        posts,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/posts") {
+      const user = await forumUserFromRequest(req);
+      if (!user) return sendJson(res, 401, { error: "请先用手机号登录后再发帖。" });
+      try {
+        const body = await readBody(req, 80_000);
+        const post = await forumStore.createPost(user, {
+          title: cleanForumText(body.title, { min: 4, max: 60, label: "标题" }),
+          body: cleanForumText(body.body, { min: 10, max: 2000, label: "正文" }),
+          topic: cleanForumText(body.topic || "求职交流", { min: 2, max: 20, label: "话题" }),
+        });
+        return sendJson(res, 201, {
+          ok: true,
+          post,
+          message: "已提交，等待管理员审核后公开展示。",
+        });
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message || "发帖失败。" });
+      }
+    }
+
+    const commentMatch = url.pathname.match(/^\/api\/forum\/posts\/([^/]+)\/comments$/);
+    if (req.method === "POST" && commentMatch) {
+      const user = await forumUserFromRequest(req);
+      if (!user) return sendJson(res, 401, { error: "请先用手机号登录后再评论。" });
+      try {
+        const body = await readBody(req, 40_000);
+        const comment = await forumStore.createComment(user, commentMatch[1], {
+          body: cleanForumText(body.body, { min: 2, max: 800, label: "评论" }),
+        });
+        return sendJson(res, 201, {
+          ok: true,
+          comment,
+          message: "评论已提交，等待管理员审核后公开展示。",
+        });
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message || "评论失败。" });
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/forum/moderation") {
+      if (!isAdminRequest(req)) return sendJson(res, 401, { error: "请先进入管理员模式。" });
+      try {
+        const body = await readBody(req, 20_000);
+        const item = await forumStore.moderate({
+          type: body.type,
+          id: String(body.id || ""),
+          status: body.status,
+          reason: body.reason,
+        });
+        return sendJson(res, 200, { ok: true, item });
+      } catch (error) {
+        return sendJson(res, 400, { error: error.message || "审核失败。" });
+      }
     }
 
     if (req.method === "GET" && url.pathname === "/api/quota") {

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="职路论坛，供老板、求职者和在职人员围绕招聘、公司核验与职场问题进行审核后讨论。"
+    />
+    <title>职路 · 求职论坛</title>
+    <link rel="icon" type="image/png" href="/brand-logo-v2.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="forum-page">
+    <header class="foreign-topbar forum-topbar">
+      <a class="foreign-brand" href="/" aria-label="返回职路企业筛选">
+        <img src="/brand-logo-v2.png" alt="" />
+        <span><strong>职路</strong><small>Graduate Job Compass</small></span>
+      </a>
+      <nav class="workspace-tabs" aria-label="工作台">
+        <a href="/">企业筛选</a>
+        <a href="/foreign.html">外企求职</a>
+        <a class="active" href="/forum.html" aria-current="page">求职论坛</a>
+      </nav>
+      <div class="forum-session-pill" id="forumSessionPill">未登录</div>
+    </header>
+
+    <main class="forum-workspace">
+      <section class="forum-hero">
+        <div>
+          <span class="eyebrow">JOB COMPASS DISCUSSION BOARD</span>
+          <h1>让招聘双方的讨论<br /><em>先经过事实和规则</em></h1>
+          <p>
+            老板、HR、求职者和在职人员都可以在这里交流公司情况、岗位体验和面试问题。
+            所有发帖和评论默认进入待审核，管理员确认合规后再公开展示。
+          </p>
+        </div>
+        <div class="forum-policy-card">
+          <strong>论坛规则</strong>
+          <span>不泄露隐私</span>
+          <span>不造谣攻击</span>
+          <span>不发布招聘收费与引流广告</span>
+          <span>尽量给出可核验事实</span>
+        </div>
+      </section>
+
+      <section class="forum-grid">
+        <aside class="forum-panel forum-account-panel">
+          <div class="forum-panel-head">
+            <div>
+              <span class="eyebrow">ACCOUNT</span>
+              <h2>手机号注册 / 登录</h2>
+            </div>
+            <button class="quiet-button" id="forumLogout" type="button" hidden>退出</button>
+          </div>
+
+          <form id="forumAuthForm" class="forum-form">
+            <label>
+              <span>手机号</span>
+              <input id="forumPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="请输入 11 位手机号" />
+            </label>
+            <label>
+              <span>密码</span>
+              <input id="forumPassword" type="password" autocomplete="current-password" placeholder="至少 6 位" />
+            </label>
+            <label class="forum-register-only">
+              <span>昵称</span>
+              <input id="forumDisplayName" type="text" maxlength="20" placeholder="例如：天津应届生 / HR小李" />
+            </label>
+            <label class="forum-register-only">
+              <span>身份</span>
+              <select id="forumRole">
+                <option value="candidate">求职者</option>
+                <option value="employee">被雇佣者 / 在职者</option>
+                <option value="boss">老板 / HR</option>
+                <option value="observer">旁观交流者</option>
+              </select>
+            </label>
+            <div class="forum-auth-actions">
+              <button class="generate-button" id="forumLogin" type="button">登录</button>
+              <button class="quiet-button" id="forumRegister" type="button">注册</button>
+            </div>
+          </form>
+
+          <div class="forum-account-card" id="forumAccountCard" hidden></div>
+
+          <div class="forum-admin-box">
+            <div>
+              <span class="eyebrow">ADMIN REVIEW</span>
+              <strong>管理员审核</strong>
+              <small>使用原网站管理员密码，登录后可批准或拒绝发言。</small>
+            </div>
+            <label>
+              <span>管理员密码</span>
+              <input id="forumAdminPassword" type="password" autocomplete="current-password" />
+            </label>
+            <button class="quiet-button" id="forumAdminLogin" type="button">进入管理员模式</button>
+          </div>
+        </aside>
+
+        <section class="forum-panel forum-compose-panel">
+          <div class="forum-panel-head">
+            <div>
+              <span class="eyebrow">NEW TOPIC</span>
+              <h2>发布讨论</h2>
+            </div>
+            <span class="forum-state-badge">先审后发</span>
+          </div>
+          <form id="forumPostForm" class="forum-form">
+            <label>
+              <span>话题</span>
+              <input id="forumTopic" type="text" maxlength="20" value="求职交流" />
+            </label>
+            <label>
+              <span>标题</span>
+              <input id="forumTitle" type="text" maxlength="60" placeholder="例如：这家公司适合应届生吗？" />
+            </label>
+            <label>
+              <span>正文</span>
+              <textarea id="forumBody" rows="7" maxlength="2000" placeholder="请描述具体情况，避免泄露个人隐私。"></textarea>
+            </label>
+            <button class="generate-button" id="forumSubmitPost" type="button">
+              <span>提交审核</span><b aria-hidden="true">→</b>
+            </button>
+          </form>
+        </section>
+      </section>
+
+      <section class="forum-panel forum-list-panel">
+        <div class="forum-panel-head">
+          <div>
+            <span class="eyebrow">DISCUSSIONS</span>
+            <h2>论坛讨论</h2>
+          </div>
+          <button class="quiet-button" id="forumRefresh" type="button">刷新</button>
+        </div>
+        <div class="forum-empty" id="forumEmpty" hidden>
+          <strong>还没有公开讨论</strong>
+          <span>可以先发布一个话题，等待管理员审核。</span>
+        </div>
+        <div class="forum-post-list" id="forumPostList"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="forumToast" role="status" aria-live="polite"></div>
+    <script src="/forum.js" type="module"></script>
+  </body>
+</html>

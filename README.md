@@ -173,3 +173,49 @@ RESUME_RATE_LIMIT=12
 注意：Render 免费 Web Service 的运行时文件写入不适合长期保存数据。当前
 `data/analytics.json` 和 `data/usage.json` 在服务重启或重新部署后可能丢失。
 如果要长期保存浏览统计，需要接 Render Disk 或改为数据库。
+
+## 论坛功能
+
+本项目新增独立论坛页：
+
+```text
+/forum.html
+```
+
+论坛支持：
+
+- 手机号 + 密码注册和登录；
+- 用户身份选择：求职者、被雇佣者 / 在职者、老板 / HR、旁观交流者；
+- 发帖和评论；
+- 所有帖子、评论默认进入“待审核”；
+- 管理员登录后可在论坛页面直接批准或拒绝待审核内容；
+- 手机号不会明文写入 `data/forum.json`，服务端只保存手机号哈希和脱敏号码。
+
+论坛相关接口：
+
+```text
+GET  /api/forum/session
+POST /api/forum/register
+POST /api/forum/login
+POST /api/forum/logout
+GET  /api/forum/posts
+POST /api/forum/posts
+POST /api/forum/posts/:id/comments
+POST /api/forum/moderation
+```
+
+论坛当前使用本地 JSON 文件持久化：
+
+```text
+data/forum.json
+```
+
+这适合课程作业、原型和小规模演示。正式长期上线时，建议把用户、帖子、评论、审核日志迁移到 MySQL、PostgreSQL 或 Render Disk 绑定的持久化存储中。
+
+建议生产环境增加以下变量：
+
+```text
+FORUM_SESSION_SECRET=一段足够长的随机字符串
+FORUM_SESSION_TTL_MS=2592000000
+FORUM_PHONE_HASH_SECRET=用于手机号哈希的随机字符串
+```
