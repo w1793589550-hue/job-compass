@@ -553,6 +553,10 @@ elements.search.addEventListener("click", async () => {
   }
 });
 
+window.addEventListener("job-compass-admin-changed", () => {
+  refreshQuota(elements.quotaStatus);
+});
+
 function downloadTablesAsCsv() {
   const tables = [...elements.resultContent.querySelectorAll("table")];
   if (!tables.length) return showToast("当前结果中没有可导出的表格");

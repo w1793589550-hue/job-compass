@@ -59,6 +59,7 @@ const resultCacheTtlMs = 15 * 60 * 1000;
 const resultCache = new Map();
 const privacyPolicyVersion = "2026-06-15";
 const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
+const adminPasswordPlain = process.env.ADMIN_PASSWORD || "";
 const adminSessionSecret = process.env.ADMIN_SESSION_SECRET || "";
 const adminSessionCookieName = "job_compass_admin";
 const adminSessionTtlMs = Math.max(
@@ -170,7 +171,7 @@ function parseCookies(req) {
 }
 
 function adminConfigured() {
-  return Boolean(adminPasswordHash && adminSessionSecret);
+  return Boolean((adminPasswordHash || adminPasswordPlain) && adminSessionSecret);
 }
 
 export function verifyPasswordHash(password, encodedHash) {
@@ -221,6 +222,19 @@ function adminCookie(token, maxAgeSeconds) {
 
 function clearAdminCookie() {
   return `${adminSessionCookieName}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
+}
+
+function verifyPlainPassword(password, expected) {
+  const actual = Buffer.from(String(password || ""));
+  const target = Buffer.from(String(expected || ""));
+  if (!actual.length || actual.length !== target.length) return false;
+  return timingSafeEqual(actual, target);
+}
+
+function verifyAdminPassword(password) {
+  if (adminPasswordHash) return verifyPasswordHash(password, adminPasswordHash);
+  if (adminPasswordPlain) return verifyPlainPassword(password, adminPasswordPlain);
+  return false;
 }
 
 function signForumSession(payload, secret = forumSessionSecret) {
@@ -1279,7 +1293,7 @@ const server = createServer(async (req, res) => {
         return sendJson(res, 503, { error: "Admin mode is not configured on the server." });
       }
       const body = await readBody(req, 10_000);
-      if (!verifyPasswordHash(body?.password, adminPasswordHash)) {
+      if (!verifyAdminPassword(body?.password)) {
         return sendJson(res, 401, { error: "Admin password is incorrect." });
       }
       const now = Date.now();

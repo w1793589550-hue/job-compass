@@ -48,6 +48,8 @@ services:
         sync: false
       - key: ADMIN_PASSWORD_HASH
         sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: ADMIN_SESSION_SECRET
         generateValue: true
       - key: FORUM_SESSION_SECRET

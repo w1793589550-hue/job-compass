@@ -366,5 +366,7 @@ elements.search.addEventListener("keydown", (event) => {
   if (event.key === "Enter") event.preventDefault();
 });
 
+window.addEventListener("job-compass-admin-changed", loadPosts);
+
 await loadSession();
 await loadPosts();

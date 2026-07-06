@@ -973,6 +973,72 @@ body.sidebar-collapsed .sidebar-rail {
   white-space: nowrap;
 }
 
+.global-admin-access {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 1400;
+  pointer-events: none;
+}
+
+.global-admin-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid rgba(17, 45, 40, .16);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, .88);
+  color: #102f2c;
+  box-shadow: 0 12px 36px rgba(15, 39, 34, .12);
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 8px 14px 8px 8px;
+  pointer-events: auto;
+}
+
+.global-admin-button span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #102f2c;
+  color: #fff;
+  font-size: 13px;
+}
+
+.global-admin-button.active {
+  border-color: rgba(15, 77, 69, .32);
+  background: #0f4d45;
+  color: #fff;
+}
+
+.global-admin-button.active span {
+  background: #fff;
+  color: #0f4d45;
+}
+
+.global-admin-dialog {
+  pointer-events: auto;
+}
+
+.global-admin-logout {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.global-admin-message {
+  display: block;
+  min-height: 18px;
+  margin-top: 10px;
+  color: #a44938;
+  font-weight: 800;
+}
+
 .admin-mode-icon {
   width: 42px;
   height: 42px;

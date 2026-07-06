@@ -1886,6 +1886,11 @@ window.addEventListener("resize", () => {
   setSidebarCollapsed(saved, { persist: false });
 });
 
+window.addEventListener("job-compass-admin-changed", () => {
+  refreshAdminMode();
+  refreshQuota(elements.quotaStatus);
+});
+
 renderModeSelection(selectedModes, { saveCurrent: false });
 setSidebarCollapsed(localStorage.getItem("jobCompassSidebarCollapsed") === "true", { persist: false });
 checkHealth();
