@@ -56,3 +56,5 @@ services:
         generateValue: true
       - key: FORUM_PHONE_HASH_SECRET
         generateValue: true
+      - key: MYSQL_URL
+        sync: false

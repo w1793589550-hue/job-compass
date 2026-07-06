@@ -168,6 +168,7 @@ RESUME_RATE_LIMIT=12
 FORUM_AUTH_RATE_LIMIT=20
 FORUM_POST_RATE_LIMIT=10
 FORUM_REPORT_RATE_LIMIT=12
+MYSQL_URL=mysql://user:password@host:3306/database
 ```
 
 ### 4. 访问线上地址
@@ -175,9 +176,10 @@ FORUM_REPORT_RATE_LIMIT=12
 部署完成后打开 Render 给出的 `https://...onrender.com` 地址。管理员统计、API
 调用、访问统计都应通过线上地址使用。
 
-注意：Render 免费 Web Service 的运行时文件写入不适合长期保存数据。当前
+注意：如果没有配置 MySQL，Render 免费 Web Service 的运行时文件写入不适合长期保存数据。当前
 `data/analytics.json`、`data/usage.json` 和 `data/forum.json` 在服务重启或重新部署后可能丢失。
-如果要长期保存浏览统计和论坛内容，需要接 Render Disk 或改为数据库。
+如果配置 `MYSQL_URL`、`DATABASE_URL`，或 `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_DATABASE`
+等 MySQL 环境变量，系统会自动创建表并把论坛、额度用量、访问统计写入 MySQL。
 
 ## 论坛功能
 

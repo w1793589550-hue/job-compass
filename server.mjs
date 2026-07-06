@@ -7,13 +7,17 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { createRequire } from "node:module";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { SlidingWindowRateLimiter } from "./lib/rate-limit.mjs";
 import { UsageStore } from "./lib/usage-store.mjs";
 import { ForumStore, normalizePhone } from "./lib/forum-store.mjs";
+import { MySqlUsageStore } from "./lib/mysql-usage-store.mjs";
+import { MySqlForumStore } from "./lib/mysql-forum-store.mjs";
+import { createMysqlPool, ensureMysqlSchema } from "./lib/mysql.mjs";
+import { JsonAnalyticsStore, MySqlAnalyticsStore } from "./lib/analytics-store.mjs";
 import { verifyEvidenceSources } from "./lib/evidence.mjs";
 import {
   defaultDeepSeekPricing,
@@ -92,18 +96,31 @@ const tavilyCreditCostCny = Math.max(
   0,
   Number(process.env.TAVILY_CREDIT_COST_CNY || 0.213378),
 );
-const usageStore = new UsageStore({
-  filePath: join(root, "data", "usage.json"),
-  limits: {
-    tavilyCredits: Math.max(1, Number(process.env.DAILY_TAVILY_CREDIT_QUOTA || 40)),
-  },
-});
-const forumStore = new ForumStore({
-  filePath: join(root, "data", "forum.json"),
-  phoneHashSecret: process.env.FORUM_PHONE_HASH_SECRET || forumSessionSecret,
-});
+const mysqlPool = createMysqlPool();
+if (mysqlPool) await ensureMysqlSchema(mysqlPool);
+const storageBackend = mysqlPool ? "mysql" : "json";
+const usageLimits = {
+  tavilyCredits: Math.max(1, Number(process.env.DAILY_TAVILY_CREDIT_QUOTA || 40)),
+};
+const usageStore = mysqlPool
+  ? new MySqlUsageStore({ pool: mysqlPool, limits: usageLimits })
+  : new UsageStore({
+    filePath: join(root, "data", "usage.json"),
+    limits: usageLimits,
+  });
+const forumStore = mysqlPool
+  ? new MySqlForumStore({
+    pool: mysqlPool,
+    phoneHashSecret: process.env.FORUM_PHONE_HASH_SECRET || forumSessionSecret,
+  })
+  : new ForumStore({
+    filePath: join(root, "data", "forum.json"),
+    phoneHashSecret: process.env.FORUM_PHONE_HASH_SECRET || forumSessionSecret,
+  });
 const analyticsFilePath = join(root, "data", "analytics.json");
-let analytics = await loadAnalytics();
+const analyticsStore = mysqlPool
+  ? new MySqlAnalyticsStore({ pool: mysqlPool })
+  : new JsonAnalyticsStore({ filePath: analyticsFilePath });
 const rateLimiter = new SlidingWindowRateLimiter();
 const rateWindowMs = Math.max(10_000, Number(process.env.RATE_LIMIT_WINDOW_MS || 10 * 60 * 1000));
 const rateLimits = {
@@ -310,46 +327,6 @@ function forumFiltersFromUrl(url, admin = false) {
   };
 }
 
-async function loadAnalytics() {
-  try {
-    return JSON.parse(await readFile(analyticsFilePath, "utf8"));
-  } catch {
-    return { visitors: {}, daily: {}, hourly: {}, contacts: { total: 0, unique: {} } };
-  }
-}
-
-async function saveAnalytics() {
-  await mkdir(join(root, "data"), { recursive: true });
-  await writeFile(analyticsFilePath, JSON.stringify(analytics, null, 2), "utf8");
-}
-
-function analyticsDayKey(date = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
-function analyticsHourKey(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}-${map.day} ${map.hour}:00`;
-}
-
-function ensureAnalyticsPeriod(container, key) {
-  container[key] ||= { views: 0, visitors: {}, contacts: 0 };
-  return container[key];
-}
-
 function shouldTrackAnalytics(req) {
   if (process.env.ANALYTICS_COUNT_LOCAL === "true") return true;
   const host = String(req.headers.host || "").toLowerCase().split(":")[0].replace(/^\[|\]$/g, "");
@@ -366,55 +343,12 @@ async function recordPageView(req) {
     setCookie = `${visitorCookieName}=${encodeURIComponent(visitorId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 365}`;
   }
 
-  const now = new Date();
-  const nowIso = now.toISOString();
-  analytics.visitors[visitorId] ||= { firstSeen: nowIso, views: 0 };
-  analytics.visitors[visitorId].lastSeen = nowIso;
-  analytics.visitors[visitorId].views += 1;
-  const day = ensureAnalyticsPeriod(analytics.daily, analyticsDayKey(now));
-  const hour = ensureAnalyticsPeriod(analytics.hourly, analyticsHourKey(now));
-  day.views += 1;
-  hour.views += 1;
-  day.visitors[visitorId] = true;
-  hour.visitors[visitorId] = true;
-  await saveAnalytics();
+  await analyticsStore.recordPageView(visitorId, req.url || "/");
   return setCookie;
 }
 
-function buildAnalyticsSummary() {
-  const today = analyticsDayKey();
-  const daily = Object.entries(analytics.daily)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-14)
-    .map(([date, value]) => ({
-      label: date.slice(5),
-      views: value.views || 0,
-      visitors: Object.keys(value.visitors || {}).length,
-      contacts: value.contacts || 0,
-    }));
-  const hourly = Object.entries(analytics.hourly)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-24)
-    .map(([date, value]) => ({
-      label: date.slice(11),
-      views: value.views || 0,
-      visitors: Object.keys(value.visitors || {}).length,
-      contacts: value.contacts || 0,
-    }));
-  return {
-    totals: {
-      views: Object.values(analytics.daily).reduce((sum, item) => sum + Number(item.views || 0), 0),
-      visitors: Object.keys(analytics.visitors || {}).length,
-      contacts: analytics.contacts.total || 0,
-      contactPeople: Object.keys(analytics.contacts.unique || {}).length,
-      todayViews: analytics.daily[today]?.views || 0,
-      todayVisitors: Object.keys(analytics.daily[today]?.visitors || {}).length,
-      todayContacts: analytics.daily[today]?.contacts || 0,
-    },
-    daily,
-    hourly,
-    updatedAt: new Date().toISOString(),
-  };
+async function buildAnalyticsSummary() {
+  return analyticsStore.summary();
 }
 
 function clientIpFromRequest(req) {
@@ -1264,6 +1198,7 @@ const server = createServer(async (req, res) => {
         resultAuditEnabled: true,
         bodyVerificationEnabled: true,
         privacyPolicyVersion,
+        storageBackend,
         usageAccounting: {
           tavilyQuotaUnit: "credits",
           tavilyCreditsPerSearch,
@@ -1285,7 +1220,7 @@ const server = createServer(async (req, res) => {
       if (!isAdminRequest(req)) {
         return sendJson(res, 401, { error: "请先进入管理员模式。" });
       }
-      return sendJson(res, 200, { ok: true, stats: buildAnalyticsSummary() });
+      return sendJson(res, 200, { ok: true, stats: await buildAnalyticsSummary() });
     }
 
     if (req.method === "POST" && url.pathname === "/api/admin/login") {

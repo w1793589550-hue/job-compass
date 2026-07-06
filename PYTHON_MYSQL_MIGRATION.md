@@ -2,6 +2,8 @@
 
 当前线上版本仍是 Node 原生 HTTP 服务 + 静态前端脚本。管理员登录问题已经在现有版本内修复，并兼容 `ADMIN_PASSWORD` 与 `ADMIN_PASSWORD_HASH` 两种配置。
 
+当前版本已经完成第一阶段迁移：配置 MySQL 后，论坛、访问统计、额度/用量数据会写入 MySQL；未配置 MySQL 时自动回退到 `data/*.json`，保证本地演示和 Render 免费环境仍能运行。
+
 用户提出的“整体改成 Python/Java + MySQL，不再使用 .js”属于完整架构迁移，不适合直接在当前线上分支一次性硬切。原因是：
 
 - 首页、外企页、论坛页的交互都依赖浏览器端脚本，包括表单联动、简历解析、结果渲染、表格导出和论坛审核。
@@ -10,9 +12,10 @@
 
 ## 推荐迁移路线
 
-1. 先迁数据库层
-   - 用 MySQL 替代 `data/usage.json`、`data/analytics.json`、`data/forum.json`。
-   - 保留当前前端和 API 路径，先确保线上数据不再因 Render 重启丢失。
+1. 先迁数据库层（已完成可选 MySQL 适配）
+   - 配置 `MYSQL_URL`、`DATABASE_URL`，或 `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_DATABASE` 后，系统会自动建表。
+   - 已覆盖 `data/usage.json`、`data/analytics.json`、`data/forum.json` 对应的数据。
+   - 保留当前前端和 API 路径，线上数据不再依赖 Render 临时文件系统。
 
 2. 再迁后端语言
    - Python 推荐 FastAPI。

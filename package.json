@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
+    "mysql2": "^3.22.5",
     "pdfjs-dist": "^6.0.227"
   }
 }
