@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}职路 · 隐私政策{% endblock %}
+{% block body_class %}server-page{% endblock %}
+{% block content %}
+<main class="foreign-workspace server-workspace">
+  <article class="forum-panel server-main-panel legal-copy">
+    <span class="eyebrow">PRIVACY POLICY</span><h1>隐私政策</h1>
+    <h2>简历内容</h2><p>只有在你主动提交并勾选授权后，Python 服务端才会读取简历文字并转发给 DeepSeek API。本站不会把简历正文写入本地文件或数据库。</p>
+    <h2>账号数据</h2><p>手机号经单向哈希后保存，展示时只使用脱敏号码；密码使用 PBKDF2-SHA256 加盐哈希，服务端不会保存明文密码。</p>
+    <h2>会话</h2><p>登录状态保存在带签名、HttpOnly、SameSite=Lax 的 Cookie 中。退出登录后浏览器会删除该 Cookie。</p>
+    <h2>公开来源</h2><p>企业筛选结果来自搜索服务返回的公开网页，并由模型按来源整理。结果只代表本次检索可见信息，投递前仍应打开原链接复核。</p>
+  </article>
+</main>
+{% endblock %}
+

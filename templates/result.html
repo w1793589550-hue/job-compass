@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}职路 · {{ result_title }}{% endblock %}
+{% block body_class %}server-page{% endblock %}
+{% block content %}
+<main class="foreign-workspace server-workspace">
+  <section class="forum-panel server-main-panel result-card-visible">
+    <div class="forum-panel-head"><div><span class="eyebrow">VERIFIED RESULT</span><h2>{{ result_title }}</h2></div><a class="quiet-button" href="{{ back_url }}">返回修改条件</a></div>
+    {% if result.error %}
+      <div class="server-result-error"><strong>暂时无法生成</strong><p>{{ result.error }}</p></div>
+    {% else %}
+      <div class="server-result-content">{{ result.content }}</div>
+      {% if result.sources %}
+        <section class="server-source-list"><h3>本次使用的公开来源</h3>{% for source in result.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><span>{{ loop.index }}</span><strong>{{ source.title }}</strong><small>{{ source.url }}</small></a>{% endfor %}</section>
+      {% endif %}
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
+

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}职路 · 企业筛选{% endblock %}
+{% block body_class %}server-page{% endblock %}
+{% block content %}
+<main class="foreign-workspace server-workspace">
+  <section class="foreign-hero server-hero">
+    <div>
+      <span class="eyebrow">CAREER RESEARCH, MADE CLEAR</span>
+      <h1>让找工作少一点<br /><em>信息差</em></h1>
+      <p>输入你的基本条件，由 Python 服务端整理企业筛选任务，并通过公开来源核验招聘信息。</p>
+    </div>
+    <div class="foreign-method-card" aria-label="工作流程">
+      <span>01</span><strong>填写条件</strong><i></i>
+      <span>02</span><strong>联网核验</strong><i></i>
+      <span>03</span><strong>形成清单</strong>
+    </div>
+  </section>
+  <section class="forum-panel server-main-panel">
+    <div class="forum-panel-head">
+      <div><span class="eyebrow">PYTHON WORKSPACE</span><h2>企业筛选工作台</h2></div>
+      <span class="forum-state-badge">服务端运行</span>
+    </div>
+    <form class="forum-form server-filter-grid" method="post" action="/generate">
+      <label><span>目标城市</span><input name="city" value="天津市" required /></label>
+      <label><span>求职身份</span><input name="identity" value="应届毕业生" required /></label>
+      <label><span>年龄</span><input name="age" type="number" min="16" max="65" value="22" /></label>
+      <label><span>目标公司数量</span><input name="count" type="number" min="1" max="30" value="10" /></label>
+      <label><span>筛选模式</span><select name="mode"><option value="balanced">平衡模式</option><option value="strict">严格模式</option><option value="emerging">新兴企业</option></select></label>
+      <label><span>DeepSeek 模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
+      <label class="server-wide"><span>岗位偏好</span><input name="roles" placeholder="例如：行政、人力、供应链、运营" /></label>
+      <label class="server-wide"><span>补充条件</span><textarea name="notes" rows="4" placeholder="可填写专业、学历、通勤范围等要求"></textarea></label>
+      <button class="generate-button server-wide" type="submit"><span>生成企业核验清单</span><b aria-hidden="true">→</b></button>
+    </form>
+  </section>
+</main>
+{% endblock %}
+

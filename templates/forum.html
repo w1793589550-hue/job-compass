@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}职路 · 求职论坛{% endblock %}
+{% block body_class %}forum-page{% endblock %}
+{% block content %}
+<main class="forum-workspace">
+  <section class="forum-hero">
+    <div>
+      <span class="eyebrow">JOB COMPASS DISCUSSION BOARD</span>
+      <h1>让招聘双方的讨论<br /><em>先经过事实和规则</em></h1>
+      <p>老板、HR、求职者和在职人员都可以交流公司情况、岗位体验和面试问题。内容默认先审后发。</p>
+    </div>
+    <div class="forum-policy-card"><strong>论坛规则</strong><span>不泄露隐私</span><span>不造谣攻击</span><span>不发布收费引流广告</span><span>尽量给出可核验事实</span></div>
+  </section>
+  <section class="forum-grid">
+    <aside class="forum-panel forum-account-panel">
+      {% if current_user %}
+        <div class="forum-panel-head"><div><span class="eyebrow">ACCOUNT</span><h2>当前账号</h2></div></div>
+        <div class="forum-account-card">
+          <strong>{{ current_user.displayName }}</strong>
+          <span>{{ role_label }}</span>
+          <small>{{ current_user.phoneMasked }}</small>
+        </div>
+        <p class="server-account-hint">论坛已经沿用顶部登录账号，无需再次登录。</p>
+      {% else %}
+        <div class="forum-panel-head" id="register"><div><span class="eyebrow">ACCOUNT</span><h2>手机号注册 / 登录</h2></div></div>
+        <form method="post" action="/auth/login" class="forum-form">
+          <input type="hidden" name="next" value="/forum" />
+          <label><span>手机号</span><input name="phone" type="tel" required /></label>
+          <label><span>密码</span><input name="password" type="password" minlength="6" required /></label>
+          <button class="generate-button" name="auth_action" value="login" type="submit">登录</button>
+        </form>
+        <hr class="server-divider" />
+        <form method="post" action="/auth/register" class="forum-form">
+          <input type="hidden" name="next" value="/forum" />
+          <label><span>手机号</span><input name="phone" type="tel" required /></label>
+          <label><span>密码</span><input name="password" type="password" minlength="6" required /></label>
+          <label><span>昵称</span><input name="display_name" maxlength="20" required /></label>
+          <label><span>身份</span><select name="role">{% for value, label in roles.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+          <button class="quiet-button" name="auth_action" value="register" type="submit">注册</button>
+        </form>
+      {% endif %}
+      <div class="forum-admin-box">
+        {% if admin_mode %}
+          <div><span class="eyebrow">ADMIN REVIEW</span><strong>管理员审核模式</strong><small>可以处理待审核帖子和评论。</small></div>
+          <form method="post" action="/admin/logout"><input type="hidden" name="next" value="/forum" /><button class="quiet-button" type="submit">退出管理员模式</button></form>
+        {% else %}
+          <form method="post" action="/admin/login" class="forum-form"><input type="hidden" name="next" value="/forum" /><label><span>管理员密码</span><input name="password" type="password" required /></label><button class="quiet-button" type="submit">进入管理员审核</button></form>
+        {% endif %}
+      </div>
+    </aside>
+    <section class="forum-panel forum-compose-panel">
+      <div class="forum-panel-head"><div><span class="eyebrow">NEW TOPIC</span><h2>发布讨论</h2></div><span class="forum-state-badge">先审后发</span></div>
+      {% if current_user %}
+        <form method="post" action="/forum/posts" class="forum-form">
+          <label><span>话题</span><select name="topic"><option>求职交流</option><option>公司核验</option><option>面试经验</option><option>入职避坑</option><option>薪资福利</option></select></label>
+          <label><span>标题</span><input name="title" maxlength="60" required /></label>
+          <label><span>正文</span><textarea name="body" rows="7" maxlength="2000" required></textarea></label>
+          <button class="generate-button" type="submit"><span>提交审核</span><b aria-hidden="true">→</b></button>
+        </form>
+      {% else %}
+        <div class="forum-empty"><strong>登录后可发布讨论</strong><span>请使用左侧表单登录或注册账号。</span></div>
+      {% endif %}
+    </section>
+  </section>
+  <section class="forum-panel forum-list-panel">
+    <div class="forum-panel-head"><div><span class="eyebrow">DISCUSSIONS</span><h2>论坛讨论</h2></div></div>
+    <div class="forum-summary-strip">
+      <span><strong>{{ summary.visiblePosts }}</strong>可见帖子</span><span><strong>{{ summary.approvedPosts }}</strong>公开帖子</span><span><strong>{{ summary.pendingPosts }}</strong>待审帖子</span><span><strong>{{ summary.pendingComments }}</strong>待审评论</span>{% if admin_mode %}<span><strong>{{ summary.openReports }}</strong>待处理举报</span>{% endif %}
+    </div>
+    <form method="get" action="/forum" class="forum-filter-bar"><label><span>关键词</span><input name="q" value="{{ filters.q }}" /></label><label><span>话题</span><select name="topic"><option value="">全部话题</option>{% for topic in ['求职交流','公司核验','面试经验','入职避坑','薪资福利'] %}<option {% if filters.topic == topic %}selected{% endif %}>{{ topic }}</option>{% endfor %}</select></label><button class="quiet-button" type="submit">筛选</button></form>
+    {% if posts %}
+      <div class="forum-post-list">
+        {% for post in posts %}
+          <article class="forum-post-card">
+            <div class="forum-post-meta">
+              <span class="forum-topic">{{ post.topic }}</span>
+              <span class="forum-status status-{{ post.status }}">{{ {'pending':'待审核','approved':'已公开','rejected':'已拒绝'}[post.status] }}</span>
+            </div>
+            <h3>{{ post.title }}</h3>
+            <p>{{ post.body }}</p>
+            <small>{{ post.author.displayName }} · {{ roles.get(post.author.role, '用户') }} · {{ post.createdAt[:10] }}</small>
+            {% if admin_mode %}
+              <form class="forum-moderation-actions" method="post" action="/forum/moderate">
+                <input type="hidden" name="target_type" value="post" /><input type="hidden" name="target_id" value="{{ post.id }}" />
+                <input name="reason" placeholder="审核备注（可选）" /><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button>
+              </form>
+            {% elif current_user and post.status == 'approved' %}
+              <form class="forum-comment-form" method="post" action="/forum/comments"><input type="hidden" name="post_id" value="{{ post.id }}" /><textarea name="body" rows="2" placeholder="写评论，提交后等待审核" required></textarea><button class="quiet-button" type="submit">提交评论</button></form>
+            {% endif %}
+            {% if post.comments %}<div class="forum-comment-list">{% for comment in post.comments %}<div class="forum-comment"><strong>{{ comment.author.displayName }}</strong><span>{{ comment.body }}</span><small>{{ {'pending':'待审核','approved':'已公开','rejected':'已拒绝'}[comment.status] }}</small>{% if admin_mode %}<form class="forum-moderation-actions" method="post" action="/forum/moderate"><input type="hidden" name="target_type" value="comment" /><input type="hidden" name="target_id" value="{{ comment.id }}" /><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button></form>{% endif %}</div>{% endfor %}</div>{% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="forum-empty"><strong>还没有可见讨论</strong><span>可以先发布一个话题，等待管理员审核。</span></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
