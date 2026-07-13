@@ -1,6 +1,8 @@
 import os
+import logging
 from pathlib import Path
 from urllib.parse import quote
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from job_compass.forum_store import ForumStore
+from job_compass.analytics_store import JsonAnalyticsStore, MySqlAnalyticsStore, chart_points
 from job_compass.mysql_store import MySqlForumStore, mysql_config_from_env
 from job_compass.research import ResearchService, extract_resume, load_local_env
 from job_compass.security import hash_password, read_session, sign_session, verify_password
@@ -17,6 +20,7 @@ ROOT = Path(__file__).resolve().parent
 load_local_env(ROOT / ".env")
 SESSION_COOKIE = "job_compass_user"
 ADMIN_COOKIE = "job_compass_admin"
+VISITOR_COOKIE = "job_compass_visitor"
 FALLBACK_ADMIN_HASH = "pbkdf2$sha256$310000$mOpDpuPhjMo9u1u7k1bIoQ$lzpjb0VN6jMQ6ZPmNSF7eVML4moaJ3U9jLqBDw6dWlI"
 ROLES = {
     "candidate": "求职者",
@@ -24,6 +28,7 @@ ROLES = {
     "boss": "老板 / HR",
     "observer": "旁观交流者",
 }
+logger = logging.getLogger(__name__)
 
 
 def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
@@ -38,9 +43,31 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         os.getenv("FORUM_PHONE_HASH_SECRET", ""),
     )
     app.state.storage_backend = "mysql" if mysql_config else "json"
+    analytics_file = (data_file.with_name("analytics.json") if data_file else Path(os.getenv("ANALYTICS_DATA_FILE", ROOT / "data" / "analytics.json")))
+    app.state.analytics = MySqlAnalyticsStore(mysql_config) if mysql_config else JsonAnalyticsStore(analytics_file)
     app.state.research = ResearchService()
     app.mount("/static", StaticFiles(directory=ROOT / "public"), name="static")
     templates = Jinja2Templates(directory=ROOT / "templates")
+    tracked_pages = {"/", "/foreign", "/foreign.html", "/forum", "/forum.html", "/privacy", "/privacy.html"}
+
+    @app.middleware("http")
+    async def record_public_page_view(request: Request, call_next):
+        response = await call_next(request)
+        if request.method == "GET" and request.url.path in tracked_pages and response.status_code < 400:
+            visitor_id = request.cookies.get(VISITOR_COOKIE, "")
+            try:
+                visitor_id = str(UUID(visitor_id))
+                new_visitor = False
+            except ValueError:
+                visitor_id = str(uuid4())
+                new_visitor = True
+            try:
+                app.state.analytics.record(visitor_id, request.url.path)
+            except Exception:
+                logger.exception("Unable to record page view")
+            if new_visitor:
+                response.set_cookie(VISITOR_COOKIE, visitor_id, max_age=365 * 24 * 3600, httponly=True, samesite="lax", secure=request.url.scheme == "https")
+        return response
 
     def current_user(request: Request) -> dict | None:
         token = request.cookies.get(SESSION_COOKIE, "")
@@ -88,14 +115,16 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         identity: str = Form(""),
         age: str = Form(""),
         count: int = Form(10),
-        mode: str = Form("balanced"),
+        modes: list[str] = Form(["balanced"]),
         model: str = Form("deepseek-v4-flash"),
         roles: str = Form(""),
         notes: str = Form(""),
     ):
+        allowed_modes = ("strict", "balanced", "emerging")
+        selected_modes = [mode for mode in allowed_modes if mode in modes] or ["balanced"]
         profile = {
             "city": city[:80], "identity": identity[:80], "age": age[:10],
-            "count": max(1, min(count, 30)), "mode": mode, "model": model,
+            "count": max(1, count), "modes": selected_modes, "model": model,
             "roles": roles[:300], "notes": notes[:1000],
         }
         result = await app.state.research.research_companies(profile)
@@ -141,6 +170,25 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         summary = app.state.store.summary(viewer_id=user["id"] if user else "", admin=is_admin)
         return templates.TemplateResponse(request, "forum.html", context(
             request, roles=ROLES, posts=posts, summary=summary, filters=filters,
+        ))
+
+    @app.get("/admin", response_class=HTMLResponse)
+    async def admin_dashboard(request: Request):
+        if not admin_mode(request):
+            return templates.TemplateResponse(request, "admin_login.html", context(request))
+        posts = app.state.store.list_posts(admin=True)
+        pending_posts = [post for post in posts if post["status"] == "pending"]
+        pending_comments = [comment for post in posts for comment in post.get("comments", []) if comment["status"] == "pending"]
+        forum_summary = app.state.store.summary(admin=True)
+        analytics = app.state.analytics.summary()
+        return templates.TemplateResponse(request, "admin.html", context(
+            request,
+            pending_posts=pending_posts,
+            pending_comments=pending_comments,
+            forum_summary=forum_summary,
+            analytics=analytics,
+            views_points=chart_points(analytics["daily"], "views"),
+            visitors_points=chart_points(analytics["daily"], "visitors"),
         ))
 
     @app.post("/forum/posts")
@@ -190,8 +238,8 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         return RedirectResponse("/forum?message=" + quote("举报已提交。"), 303)
 
     @app.post("/admin/login")
-    async def admin_login(request: Request, password: str = Form(""), next: str = Form("/forum")):
-        destination = safe_next(next, "/forum")
+    async def admin_login(request: Request, password: str = Form(""), next: str = Form("/admin")):
+        destination = safe_next(next, "/admin")
         configured_hash = os.getenv("ADMIN_PASSWORD_HASH", "")
         configured_plain = os.getenv("ADMIN_PASSWORD", "")
         if configured_hash:
@@ -207,15 +255,15 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         return response
 
     @app.post("/admin/logout")
-    async def admin_logout(next: str = Form("/forum")):
-        response = RedirectResponse(safe_next(next, "/forum"), 303)
+    async def admin_logout(next: str = Form("/admin")):
+        response = RedirectResponse(safe_next(next, "/admin"), 303)
         response.delete_cookie(ADMIN_COOKIE)
         return response
 
     @app.post("/forum/moderate")
     async def moderate_forum(
         request: Request, target_type: str = Form(""), target_id: str = Form(""),
-        status: str = Form(""), reason: str = Form(""),
+        status: str = Form(""), reason: str = Form(""), next: str = Form("/admin"),
     ):
         if not admin_mode(request):
             return RedirectResponse("/forum?error=" + quote("需要管理员权限。"), 303)
@@ -223,7 +271,8 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             app.state.store.moderate(target_type, target_id, status, reason.strip())
         except ValueError as error:
             return RedirectResponse("/forum?error=" + quote(str(error)), 303)
-        return RedirectResponse("/forum?message=" + quote("审核状态已更新。"), 303)
+        destination = safe_next(next, "/admin")
+        return RedirectResponse(destination + "?message=" + quote("审核状态已更新。"), 303)
 
     @app.post("/auth/register")
     async def register(

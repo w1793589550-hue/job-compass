@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import re
+from types import SimpleNamespace
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -13,7 +14,8 @@ class WebAuthenticationTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         data_file = Path(self.temporary_directory.name) / "forum.json"
-        self.client = TestClient(create_app(data_file=data_file, testing=True))
+        self.app = create_app(data_file=data_file, testing=True)
+        self.client = TestClient(self.app)
 
     def tearDown(self):
         self.client.close()
@@ -69,7 +71,7 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertIn("待审核", response.text)
 
     def test_primary_pages_are_server_rendered_without_scripts(self):
-        for path in ("/", "/foreign", "/forum", "/privacy"):
+        for path in ("/", "/foreign", "/forum", "/privacy", "/admin"):
             with self.subTest(path=path):
                 page = self.client.get(path)
                 self.assertEqual(page.status_code, 200)
@@ -93,6 +95,28 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("尚未配置", response.text)
 
+    def test_filter_modes_are_multi_select_and_company_count_has_no_upper_limit(self):
+        page = self.client.get("/")
+        self.assertEqual(page.text.count('name="modes"'), 3)
+        self.assertNotIn('name="count" type="number" min="1" max=', page.text)
+
+        class CapturingResearch:
+            async def research_companies(inner_self, profile):
+                selected = ",".join(profile["modes"])
+                return SimpleNamespace(content=f"数量={profile['count']}；模式={selected}", sources=[], error="")
+
+        self.app.state.research = CapturingResearch()
+        response = self.client.post(
+            "/generate",
+            data={
+                "city": "天津市", "identity": "应届毕业生", "age": "22", "count": "250",
+                "modes": ["strict", "emerging"], "model": "deepseek-v4-flash", "roles": "行政", "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("数量=250；模式=strict,emerging", response.text)
+
     def test_admin_can_approve_a_pending_post(self):
         self.register("刘同学")
         self.client.post(
@@ -100,7 +124,7 @@ class WebAuthenticationTests(unittest.TestCase):
             data={"topic": "求职交流", "title": "等待审核的帖子", "body": "这是用于验证审核流程的正文内容。"},
         )
         admin_login = self.client.post(
-            "/admin/login", data={"password": "wang1122lu87", "next": "/forum"}, follow_redirects=True,
+            "/admin/login", data={"password": "wang1122lu87", "next": "/admin"}, follow_redirects=True,
         )
         self.assertEqual(admin_login.status_code, 200)
         match = re.search(r'name="target_id" value="([^"]+)"', admin_login.text)
@@ -108,12 +132,40 @@ class WebAuthenticationTests(unittest.TestCase):
 
         approved = self.client.post(
             "/forum/moderate",
-            data={"target_type": "post", "target_id": match.group(1), "status": "approved", "reason": "内容合规"},
+            data={"target_type": "post", "target_id": match.group(1), "status": "approved", "reason": "内容合规", "next": "/admin"},
             follow_redirects=True,
         )
 
         self.assertEqual(approved.status_code, 200)
-        self.assertIn("已公开", approved.text)
+        self.assertIn("审核状态已更新", approved.text)
+        self.assertIn("暂无待审核帖子", approved.text)
+
+    def test_admin_dashboard_shows_review_queue_and_visit_analytics(self):
+        login_page = self.client.get("/admin")
+        self.assertEqual(login_page.status_code, 200)
+        self.assertIn("管理员后台登录", login_page.text)
+
+        self.client.get("/")
+        self.client.get("/")
+        second_visitor = TestClient(self.app)
+        second_visitor.get("/foreign")
+        second_visitor.close()
+
+        self.register("刘同学")
+        self.client.post(
+            "/forum/posts",
+            data={"topic": "求职交流", "title": "后台待审核帖子", "body": "这条内容应当出现在独立管理后台。"},
+        )
+        dashboard = self.client.post(
+            "/admin/login", data={"password": "wang1122lu87"}, follow_redirects=True,
+        )
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn("管理后台", dashboard.text)
+        self.assertIn('data-metric="today-visitors">2', dashboard.text)
+        self.assertIn('data-metric="today-views">4', dashboard.text)
+        self.assertIn("后台待审核帖子", dashboard.text)
+        self.assertIn("<svg", dashboard.text)
 
     def test_mysql_url_is_parsed_for_python_storage_adapter(self):
         config = mysql_config_from_env({"MYSQL_URL": "mysql://demo:p%40ss@db.example:3307/job_compass"})

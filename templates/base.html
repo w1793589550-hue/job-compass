@@ -20,6 +20,7 @@
         <a href="/forum" class="{% if request.url.path.startswith('/forum') %}active{% endif %}">求职论坛</a>
       </nav>
       <div class="server-account">
+        <a class="admin-entry-link {% if request.url.path.startswith('/admin') %}active{% endif %}" href="/admin" aria-label="打开管理后台">管理后台</a>
         {% if current_user %}
           <span class="user-avatar" aria-label="{{ current_user.displayName }}的头像">{{ avatar_initial }}</span>
           <span class="server-account-name"><strong>{{ current_user.displayName }}</strong><small>{{ role_label }}</small></span>

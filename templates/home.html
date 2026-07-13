@@ -24,8 +24,24 @@
       <label><span>目标城市</span><input name="city" value="天津市" required /></label>
       <label><span>求职身份</span><input name="identity" value="应届毕业生" required /></label>
       <label><span>年龄</span><input name="age" type="number" min="16" max="65" value="22" /></label>
-      <label><span>目标公司数量</span><input name="count" type="number" min="1" max="30" value="10" /></label>
-      <label><span>筛选模式</span><select name="mode"><option value="balanced">平衡模式</option><option value="strict">严格模式</option><option value="emerging">新兴企业</option></select></label>
+      <label><span>目标公司数量</span><input name="count" type="number" min="1" value="10" /></label>
+      <fieldset class="server-mode-field server-wide">
+        <legend>筛选模式 <small>支持复选</small></legend>
+        <div class="server-mode-options">
+          <label class="server-mode-option">
+            <input name="modes" type="checkbox" value="strict" />
+            <span><b>01</b><strong>严格模式</strong><small>成熟企业 · 条件全部满足</small></span>
+          </label>
+          <label class="server-mode-option">
+            <input name="modes" type="checkbox" value="balanced" checked />
+            <span><b>02</b><strong>平衡模式</strong><small>可靠优先 · 兼顾结果数量</small></span>
+          </label>
+          <label class="server-mode-option">
+            <input name="modes" type="checkbox" value="emerging" />
+            <span><b>03</b><strong>新兴企业</strong><small>扩大发现 · 关注成长公司</small></span>
+          </label>
+        </div>
+      </fieldset>
       <label><span>DeepSeek 模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
       <label class="server-wide"><span>岗位偏好</span><input name="roles" placeholder="例如：行政、人力、供应链、运营" /></label>
       <label class="server-wide"><span>补充条件</span><textarea name="notes" rows="4" placeholder="可填写专业、学历、通勤范围等要求"></textarea></label>
@@ -34,4 +50,3 @@
   </section>
 </main>
 {% endblock %}
-

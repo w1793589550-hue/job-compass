@@ -128,7 +128,7 @@ class ResearchService:
 年龄：{profile.get('age', '')}
 岗位偏好：{roles}
 目标数量：{profile.get('count', 10)}
-筛选模式：{profile.get('mode', 'balanced')}
+筛选模式（可复选）：{', '.join(profile.get('modes', ['balanced']))}
 补充条件：{profile.get('notes', '')}
 
 公开来源：
@@ -168,4 +168,3 @@ def extract_resume(filename: str, content: bytes) -> str:
     if suffix in {"txt", "md"}:
         return content.decode("utf-8", errors="replace")
     raise ValueError("仅支持 PDF、DOCX、TXT 和 MD 简历。")
-

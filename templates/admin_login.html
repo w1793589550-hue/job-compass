@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}职路 · 管理员后台登录{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block content %}
+<main class="admin-login-shell">
+  <section class="admin-login-card">
+    <span class="eyebrow">ADMIN CONSOLE</span>
+    <h1>管理员后台登录</h1>
+    <p>登录后可审核帖子与评论，并查看网站访问趋势。</p>
+    <form method="post" action="/admin/login" class="forum-form">
+      <input type="hidden" name="next" value="/admin" />
+      <label><span>管理员密码</span><input name="password" type="password" autocomplete="current-password" required autofocus /></label>
+      <button class="generate-button" type="submit"><span>进入管理后台</span><b aria-hidden="true">→</b></button>
+    </form>
+  </section>
+</main>
+{% endblock %}

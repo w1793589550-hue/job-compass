@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}职路 · 管理后台{% endblock %}
+{% block body_class %}admin-page{% endblock %}
+{% block content %}
+<main class="admin-workspace">
+  <header class="admin-heading">
+    <div><span class="eyebrow">ADMIN CONSOLE</span><h1>管理后台</h1><p>访问趋势与社区内容审核</p></div>
+    <form method="post" action="/admin/logout"><input type="hidden" name="next" value="/admin" /><button class="quiet-button" type="submit">退出后台</button></form>
+  </header>
+
+  <section class="admin-metrics" aria-label="网站统计">
+    <article><span>今日访客</span><strong data-metric="today-visitors">{{ analytics.totals.todayVisitors }}</strong><small>独立访客</small></article>
+    <article><span>今日浏览</span><strong data-metric="today-views">{{ analytics.totals.todayViews }}</strong><small>页面浏览次数</small></article>
+    <article><span>累计访客</span><strong>{{ analytics.totals.visitors }}</strong><small>独立访客</small></article>
+    <article><span>累计浏览</span><strong>{{ analytics.totals.views }}</strong><small>页面浏览次数</small></article>
+    <article><span>待审内容</span><strong>{{ forum_summary.pendingPosts + forum_summary.pendingComments }}</strong><small>帖子与评论</small></article>
+  </section>
+
+  <section class="admin-panel admin-chart-panel">
+    <div class="admin-panel-head"><div><span class="eyebrow">TRAFFIC</span><h2>近 14 天访问变化</h2></div><div class="chart-legend"><span class="views">浏览量</span><span class="visitors">访客数</span></div></div>
+    <div class="admin-chart-scroll">
+      <svg class="admin-chart" viewBox="0 0 720 220" role="img" aria-label="近14天浏览量和访客数折线图">
+        <line x1="24" y1="192" x2="696" y2="192"></line>
+        <line x1="24" y1="106" x2="696" y2="106"></line>
+        <line x1="24" y1="20" x2="696" y2="20"></line>
+        <polyline class="chart-line views" points="{{ views_points }}"></polyline>
+        <polyline class="chart-line visitors" points="{{ visitors_points }}"></polyline>
+      </svg>
+      <div class="admin-chart-labels">{% for day in analytics.daily %}<span>{{ day.label }}</span>{% endfor %}</div>
+    </div>
+  </section>
+
+  <section class="admin-review-grid">
+    <section class="admin-panel">
+      <div class="admin-panel-head"><div><span class="eyebrow">POST REVIEW</span><h2>待审核帖子</h2></div><strong>{{ pending_posts|length }}</strong></div>
+      {% if pending_posts %}<div class="admin-review-list">{% for post in pending_posts %}<article><span class="forum-topic">{{ post.topic }}</span><h3>{{ post.title }}</h3><p>{{ post.body }}</p><small>{{ post.author.displayName }} · {{ post.createdAt[:16].replace('T', ' ') }}</small><form method="post" action="/forum/moderate"><input type="hidden" name="target_type" value="post" /><input type="hidden" name="target_id" value="{{ post.id }}" /><input type="hidden" name="next" value="/admin" /><input name="reason" placeholder="审核备注（可选）" /><div><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button></div></form></article>{% endfor %}</div>{% else %}<div class="admin-empty">暂无待审核帖子</div>{% endif %}
+    </section>
+    <section class="admin-panel">
+      <div class="admin-panel-head"><div><span class="eyebrow">COMMENT REVIEW</span><h2>待审核评论</h2></div><strong>{{ pending_comments|length }}</strong></div>
+      {% if pending_comments %}<div class="admin-review-list">{% for comment in pending_comments %}<article><p>{{ comment.body }}</p><small>{{ comment.author.displayName }} · {{ comment.createdAt[:16].replace('T', ' ') }}</small><form method="post" action="/forum/moderate"><input type="hidden" name="target_type" value="comment" /><input type="hidden" name="target_id" value="{{ comment.id }}" /><input type="hidden" name="next" value="/admin" /><input name="reason" placeholder="审核备注（可选）" /><div><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button></div></form></article>{% endfor %}</div>{% else %}<div class="admin-empty">暂无待审核评论</div>{% endif %}
+    </section>
+  </section>
+</main>
+{% endblock %}

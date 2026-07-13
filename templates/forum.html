@@ -39,14 +39,7 @@
           <button class="quiet-button" name="auth_action" value="register" type="submit">注册</button>
         </form>
       {% endif %}
-      <div class="forum-admin-box">
-        {% if admin_mode %}
-          <div><span class="eyebrow">ADMIN REVIEW</span><strong>管理员审核模式</strong><small>可以处理待审核帖子和评论。</small></div>
-          <form method="post" action="/admin/logout"><input type="hidden" name="next" value="/forum" /><button class="quiet-button" type="submit">退出管理员模式</button></form>
-        {% else %}
-          <form method="post" action="/admin/login" class="forum-form"><input type="hidden" name="next" value="/forum" /><label><span>管理员密码</span><input name="password" type="password" required /></label><button class="quiet-button" type="submit">进入管理员审核</button></form>
-        {% endif %}
-      </div>
+      <a class="admin-portal-card" href="/admin"><span class="eyebrow">ADMIN CONSOLE</span><strong>打开管理后台</strong><small>审核内容并查看访问统计</small></a>
     </aside>
     <section class="forum-panel forum-compose-panel">
       <div class="forum-panel-head"><div><span class="eyebrow">NEW TOPIC</span><h2>发布讨论</h2></div><span class="forum-state-badge">先审后发</span></div>
@@ -79,15 +72,10 @@
             <h3>{{ post.title }}</h3>
             <p>{{ post.body }}</p>
             <small>{{ post.author.displayName }} · {{ roles.get(post.author.role, '用户') }} · {{ post.createdAt[:10] }}</small>
-            {% if admin_mode %}
-              <form class="forum-moderation-actions" method="post" action="/forum/moderate">
-                <input type="hidden" name="target_type" value="post" /><input type="hidden" name="target_id" value="{{ post.id }}" />
-                <input name="reason" placeholder="审核备注（可选）" /><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button>
-              </form>
-            {% elif current_user and post.status == 'approved' %}
+            {% if current_user and post.status == 'approved' %}
               <form class="forum-comment-form" method="post" action="/forum/comments"><input type="hidden" name="post_id" value="{{ post.id }}" /><textarea name="body" rows="2" placeholder="写评论，提交后等待审核" required></textarea><button class="quiet-button" type="submit">提交评论</button></form>
             {% endif %}
-            {% if post.comments %}<div class="forum-comment-list">{% for comment in post.comments %}<div class="forum-comment"><strong>{{ comment.author.displayName }}</strong><span>{{ comment.body }}</span><small>{{ {'pending':'待审核','approved':'已公开','rejected':'已拒绝'}[comment.status] }}</small>{% if admin_mode %}<form class="forum-moderation-actions" method="post" action="/forum/moderate"><input type="hidden" name="target_type" value="comment" /><input type="hidden" name="target_id" value="{{ comment.id }}" /><button name="status" value="approved" type="submit">批准</button><button name="status" value="rejected" type="submit">拒绝</button></form>{% endif %}</div>{% endfor %}</div>{% endif %}
+            {% if post.comments %}<div class="forum-comment-list">{% for comment in post.comments %}<div class="forum-comment"><strong>{{ comment.author.displayName }}</strong><span>{{ comment.body }}</span><small>{{ {'pending':'待审核','approved':'已公开','rejected':'已拒绝'}[comment.status] }}</small></div>{% endfor %}</div>{% endif %}
           </article>
         {% endfor %}
       </div>
