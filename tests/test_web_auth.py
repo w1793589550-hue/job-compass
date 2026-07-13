@@ -80,6 +80,20 @@ class WebAuthenticationTests(unittest.TestCase):
                 else:
                     self.assertIn("/analytics/page-view", page.text)
 
+    def test_home_page_has_portal_workbench_sections(self):
+        page = self.client.get("/")
+
+        self.assertEqual(page.status_code, 200)
+        for expected in (
+            "求职门户工作台",
+            "我的待办任务",
+            "画像信息",
+            "求职日程安排",
+            "常用资料下载",
+            "企业核验",
+        ):
+            self.assertIn(expected, page.text)
+
     def record_browser_view(self, visitor_id, path):
         return self.client.post(
             "/analytics/page-view",
