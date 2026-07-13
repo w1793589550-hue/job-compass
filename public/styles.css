@@ -1227,11 +1227,23 @@ body.sidebar-collapsed .sidebar-rail {
   .server-filter-grid { grid-template-columns: 1fr; }
   .server-wide { grid-column: auto; }
   .server-mode-options { grid-template-columns: 1fr; }
+  .result-page-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .server-result-table { min-width: 640px; }
 }
 
 .server-result-error { padding: 28px; background: rgba(164,73,56,.08); color: #79382d; }
 .server-result-error strong { font-size: 21px; }
 .server-result-content { white-space: pre-wrap; line-height: 1.8; color: #253d39; }
+.server-result-content.result-content { white-space: normal; }
+.result-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.result-download-button { color: #fff; background: #0f766e; border-color: #0f766e; }
+.result-download-button:hover { color: #fff; background: #0b5f59; }
+.server-result-table-wrap { width: 100%; margin: 18px 0 26px; overflow-x: auto; border: 1px solid rgba(15,77,69,.14); background: rgba(255,255,255,.76); }
+.server-result-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.server-result-table th,
+.server-result-table td { padding: 12px 14px; border: 1px solid rgba(15,77,69,.14); text-align: left; vertical-align: top; }
+.server-result-table th { color: #fff; background: #0f766e; font-weight: 800; }
+.server-result-table td strong { color: #102f2c; }
 .server-source-list { display: grid; gap: 10px; margin-top: 28px; }
 .server-source-list h3 { margin: 0 0 4px; color: #102f2c; }
 .server-source-list a { display: grid; grid-template-columns: 34px 1fr; gap: 2px 10px; padding: 12px; border: 1px solid rgba(15,77,69,.12); color: #164f48; text-decoration: none; }
@@ -2671,7 +2683,9 @@ body.sidebar-collapsed .sidebar-rail {
 .generate-button {
   flex: 0 0 auto;
   display: flex;
+  position: relative;
   align-items: center;
+  justify-content: space-between;
   gap: 34px;
   padding: 16px 20px 16px 25px;
   border: 0;
@@ -2695,6 +2709,30 @@ body.sidebar-collapsed .sidebar-rail {
 
 .generate-button b {
   font-size: 24px;
+}
+
+.generate-button .submit-spinner {
+  display: none;
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255,255,255,.36);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: submit-spin .72s linear infinite;
+}
+
+.generate-button:focus .submit-spinner,
+.generate-button:active .submit-spinner {
+  display: inline-block;
+}
+
+.generate-button:focus b,
+.generate-button:active b {
+  display: none;
+}
+
+@keyframes submit-spin {
+  to { transform: rotate(360deg); }
 }
 
 .result-card {
@@ -2856,6 +2894,11 @@ body.sidebar-collapsed .sidebar-rail {
   border-collapse: collapse;
   display: block;
   overflow-x: auto;
+}
+
+.result-content .server-result-table {
+  display: table;
+  min-width: 760px;
 }
 
 .result-content th,

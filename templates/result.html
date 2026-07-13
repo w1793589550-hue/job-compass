@@ -4,11 +4,19 @@
 {% block content %}
 <main class="foreign-workspace server-workspace">
   <section class="forum-panel server-main-panel result-card-visible">
-    <div class="forum-panel-head"><div><span class="eyebrow">VERIFIED RESULT</span><h2>{{ result_title }}</h2></div><a class="quiet-button" href="{{ back_url }}">返回修改条件</a></div>
+    <div class="forum-panel-head">
+      <div><span class="eyebrow">VERIFIED RESULT</span><h2>{{ result_title }}</h2></div>
+      <div class="result-page-actions">
+        {% if result_export_id %}
+          <a class="quiet-button result-download-button" href="/downloads/results/{{ result_export_id }}.csv">下载表格</a>
+        {% endif %}
+        <a class="quiet-button" href="{{ back_url }}">返回修改条件</a>
+      </div>
+    </div>
     {% if result.error %}
       <div class="server-result-error"><strong>暂时无法生成</strong><p>{{ result.error }}</p></div>
     {% else %}
-      <div class="server-result-content">{{ result.content }}</div>
+      <div class="server-result-content result-content">{{ rendered_result|safe }}</div>
       {% if result.sources %}
         <section class="server-source-list"><h3>本次使用的公开来源</h3>{% for source in result.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer"><span>{{ loop.index }}</span><strong>{{ source.title }}</strong><small>{{ source.url }}</small></a>{% endfor %}</section>
       {% endif %}
@@ -16,4 +24,3 @@
   </section>
 </main>
 {% endblock %}
-

@@ -5,13 +5,14 @@ from urllib.parse import quote
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from job_compass.forum_store import ForumStore
 from job_compass.analytics_store import JsonAnalyticsStore, MySqlAnalyticsStore, chart_points
 from job_compass.mysql_store import MySqlForumStore, mysql_config_from_env
+from job_compass.result_renderer import render_result_content, result_tables_to_csv
 from job_compass.research import ResearchService, extract_resume, load_local_env
 from job_compass.security import hash_password, read_session, sign_session, verify_password
 
@@ -46,6 +47,7 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
     analytics_file = (data_file.with_name("analytics.json") if data_file else Path(os.getenv("ANALYTICS_DATA_FILE", ROOT / "data" / "analytics.json")))
     app.state.analytics = MySqlAnalyticsStore(mysql_config) if mysql_config else JsonAnalyticsStore(analytics_file)
     app.state.research = ResearchService()
+    app.state.result_exports = {}
     app.mount("/static", StaticFiles(directory=ROOT / "public"), name="static")
     templates = Jinja2Templates(directory=ROOT / "templates")
     tracked_pages = {"/", "/foreign", "/foreign.html", "/forum", "/forum.html", "/privacy", "/privacy.html"}
@@ -91,6 +93,17 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             **values,
         }
 
+    def result_view_values(result) -> dict:
+        rendered_result = render_result_content(result.content) if not result.error else ""
+        export_csv = result_tables_to_csv(result.content) if not result.error else ""
+        result_export_id = ""
+        if export_csv:
+            result_export_id = str(uuid4())
+            app.state.result_exports[result_export_id] = export_csv
+            while len(app.state.result_exports) > 50:
+                app.state.result_exports.pop(next(iter(app.state.result_exports)))
+        return {"rendered_result": rendered_result, "result_export_id": result_export_id}
+
     def safe_next(value: str, fallback: str = "/") -> str:
         return value if value.startswith("/") and not value.startswith("//") else fallback
 
@@ -129,8 +142,20 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         }
         result = await app.state.research.research_companies(profile)
         return templates.TemplateResponse(request, "result.html", context(
-            request, result=result, profile=profile, result_title="企业与岗位核验结果", back_url="/",
+            request, result=result, **result_view_values(result),
+            profile=profile, result_title="企业与岗位核验结果", back_url="/",
         ))
+
+    @app.get("/downloads/results/{export_id}.csv")
+    async def download_result_table(export_id: str):
+        content = app.state.result_exports.get(export_id)
+        if not content:
+            return Response("Export expired or not found.", status_code=404, media_type="text/plain")
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="job-compass-result.csv"'},
+        )
 
     @app.post("/foreign/analyze", response_class=HTMLResponse)
     async def foreign_analyze(
@@ -157,7 +182,8 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             else:
                 result = await app.state.research.analyze_resume(text, {"city": city, "english": english, "roles": roles, "model": model})
         return templates.TemplateResponse(request, "result.html", context(
-            request, result=result, profile={}, result_title="简历与岗位方向分析", back_url="/foreign",
+            request, result=result, **result_view_values(result),
+            profile={}, result_title="简历与岗位方向分析", back_url="/foreign",
         ))
 
     @app.get("/forum", response_class=HTMLResponse)

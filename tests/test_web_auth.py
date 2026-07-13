@@ -78,6 +78,11 @@ class WebAuthenticationTests(unittest.TestCase):
                 self.assertNotIn("<script", page.text.lower())
 
     def test_generate_explains_missing_api_configuration(self):
+        class MissingResearch:
+            async def research_companies(inner_self, profile):
+                return SimpleNamespace(content="", sources=[], error="尚未配置 DeepSeek 与搜索服务密钥。")
+
+        self.app.state.research = MissingResearch()
         response = self.client.post(
             "/generate",
             data={
@@ -94,6 +99,42 @@ class WebAuthenticationTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("尚未配置", response.text)
+
+    def test_generate_renders_tables_and_downloads_csv_export(self):
+        class TableResearch:
+            async def research_companies(inner_self, profile):
+                content = "\n".join([
+                    "### Target 1",
+                    "",
+                    "| Item | Value | Source |",
+                    "| :--- | :--- | :--- |",
+                    "| **Company** | Acme Ltd | [1] |",
+                    "| **Role** | AI Intern | [1] |",
+                ])
+                return SimpleNamespace(content=content, sources=[], error="")
+
+        self.app.state.research = TableResearch()
+        response = self.client.post(
+            "/generate",
+            data={
+                "city": "Tianjin", "identity": "Graduate", "age": "22", "count": "5",
+                "modes": ["balanced"], "model": "deepseek-v4-flash", "roles": "AI", "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<table class="server-result-table">', response.text)
+        self.assertIn("<th>Item</th>", response.text)
+        self.assertNotIn("| Item | Value | Source |", response.text)
+        match = re.search(r'href="(/downloads/results/[^"]+\.csv)"', response.text)
+        self.assertIsNotNone(match)
+
+        export = self.client.get(match.group(1))
+
+        self.assertEqual(export.status_code, 200)
+        self.assertEqual(export.headers["content-type"], "text/csv; charset=utf-8")
+        self.assertIn("attachment", export.headers["content-disposition"])
+        self.assertIn("Company,Acme Ltd,[1]", export.text)
 
     def test_filter_modes_are_multi_select_and_company_count_has_no_upper_limit(self):
         page = self.client.get("/")
