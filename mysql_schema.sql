@@ -90,3 +90,19 @@ CREATE TABLE IF NOT EXISTS analytics_contacts (
   INDEX idx_analytics_contacts_created (created_at),
   INDEX idx_analytics_contacts_client (client_id)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS browser_analytics_visitors (
+  visitor_id VARCHAR(80) PRIMARY KEY,
+  first_seen TIMESTAMP NOT NULL,
+  last_seen TIMESTAMP NOT NULL,
+  views INT NOT NULL DEFAULT 0
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS browser_analytics_page_views (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  visitor_id VARCHAR(80) NOT NULL,
+  page_path VARCHAR(255) NOT NULL,
+  viewed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_browser_analytics_viewed_at (viewed_at),
+  INDEX idx_browser_analytics_page_path (page_path)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

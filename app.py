@@ -1,8 +1,9 @@
-import os
 import logging
+import os
+import re
 from pathlib import Path
 from urllib.parse import quote
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -21,7 +22,6 @@ ROOT = Path(__file__).resolve().parent
 load_local_env(ROOT / ".env")
 SESSION_COOKIE = "job_compass_user"
 ADMIN_COOKIE = "job_compass_admin"
-VISITOR_COOKIE = "job_compass_visitor"
 FALLBACK_ADMIN_HASH = "pbkdf2$sha256$310000$mOpDpuPhjMo9u1u7k1bIoQ$lzpjb0VN6jMQ6ZPmNSF7eVML4moaJ3U9jLqBDw6dWlI"
 ROLES = {
     "candidate": "求职者",
@@ -52,25 +52,6 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
     templates = Jinja2Templates(directory=ROOT / "templates")
     tracked_pages = {"/", "/foreign", "/foreign.html", "/forum", "/forum.html", "/privacy", "/privacy.html"}
 
-    @app.middleware("http")
-    async def record_public_page_view(request: Request, call_next):
-        response = await call_next(request)
-        if request.method == "GET" and request.url.path in tracked_pages and response.status_code < 400:
-            visitor_id = request.cookies.get(VISITOR_COOKIE, "")
-            try:
-                visitor_id = str(UUID(visitor_id))
-                new_visitor = False
-            except ValueError:
-                visitor_id = str(uuid4())
-                new_visitor = True
-            try:
-                app.state.analytics.record(visitor_id, request.url.path)
-            except Exception:
-                logger.exception("Unable to record page view")
-            if new_visitor:
-                response.set_cookie(VISITOR_COOKIE, visitor_id, max_age=365 * 24 * 3600, httponly=True, samesite="lax", secure=request.url.scheme == "https")
-        return response
-
     def current_user(request: Request) -> dict | None:
         token = request.cookies.get(SESSION_COOKIE, "")
         user_id = read_session(token, app.state.session_secret) if token else None
@@ -88,6 +69,7 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             "admin_mode": admin_mode(request),
             "avatar_initial": (user.get("displayName", "用").strip() or "用")[0] if user else "用",
             "role_label": ROLES.get(user.get("role"), "用户") if user else "",
+            "track_browser_analytics": request.method == "GET" and request.url.path in tracked_pages,
             "message": request.query_params.get("message", ""),
             "error": request.query_params.get("error", ""),
             **values,
@@ -120,6 +102,26 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
     @app.get("/privacy.html", response_class=HTMLResponse)
     async def privacy(request: Request):
         return templates.TemplateResponse(request, "privacy.html", context(request))
+
+    @app.post("/analytics/page-view")
+    async def browser_page_view(request: Request):
+        try:
+            payload = await request.json()
+        except ValueError:
+            return {"ok": False}
+        visitor_id = str(payload.get("visitorId", ""))[:80]
+        page_path = str(payload.get("path", ""))[:255]
+        user_agent = request.headers.get("user-agent", "").lower()
+        browser_like = any(token in user_agent for token in ("mozilla", "chrome", "safari", "firefox", "edg"))
+        valid_visitor = bool(re.fullmatch(r"[A-Za-z0-9._:-]{12,80}", visitor_id))
+        if page_path not in tracked_pages or not valid_visitor or not browser_like:
+            return {"ok": False}
+        try:
+            app.state.analytics.record(visitor_id, page_path)
+        except Exception:
+            logger.exception("Unable to record browser page view")
+            return {"ok": False}
+        return {"ok": True}
 
     @app.post("/generate", response_class=HTMLResponse)
     async def generate(

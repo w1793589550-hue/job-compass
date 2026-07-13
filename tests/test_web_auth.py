@@ -70,12 +70,42 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertIn("天津校招信息", response.text)
         self.assertIn("待审核", response.text)
 
-    def test_primary_pages_are_server_rendered_without_scripts(self):
+    def test_primary_pages_include_browser_analytics_script(self):
         for path in ("/", "/foreign", "/forum", "/privacy", "/admin"):
             with self.subTest(path=path):
                 page = self.client.get(path)
                 self.assertEqual(page.status_code, 200)
-                self.assertNotIn("<script", page.text.lower())
+                if path == "/admin":
+                    self.assertNotIn("/analytics/page-view", page.text)
+                else:
+                    self.assertIn("/analytics/page-view", page.text)
+
+    def record_browser_view(self, visitor_id, path):
+        return self.client.post(
+            "/analytics/page-view",
+            json={"visitorId": visitor_id, "path": path},
+            headers={"user-agent": "Mozilla/5.0 Chrome/126.0"},
+        )
+
+    def test_admin_analytics_use_browser_reported_page_views(self):
+        self.client.get("/")
+        empty = self.app.state.analytics.summary()
+        self.assertEqual(empty["totals"]["views"], 0)
+        self.assertEqual(empty["totals"]["visitors"], 0)
+
+        self.assertEqual(self.record_browser_view("browser-user-0001", "/").json(), {"ok": True})
+        self.assertEqual(self.record_browser_view("browser-user-0001", "/forum").json(), {"ok": True})
+        self.assertEqual(self.record_browser_view("browser-user-0002", "/foreign").json(), {"ok": True})
+        rejected = self.client.post(
+            "/analytics/page-view",
+            json={"visitorId": "script-client", "path": "/admin"},
+            headers={"user-agent": "python-httpx"},
+        )
+        self.assertEqual(rejected.json(), {"ok": False})
+
+        summary = self.app.state.analytics.summary()
+        self.assertEqual(summary["totals"]["todayViews"], 3)
+        self.assertEqual(summary["totals"]["todayVisitors"], 2)
 
     def test_generate_explains_missing_api_configuration(self):
         class MissingResearch:
@@ -186,11 +216,9 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertEqual(login_page.status_code, 200)
         self.assertIn("管理员后台登录", login_page.text)
 
-        self.client.get("/")
-        self.client.get("/")
-        second_visitor = TestClient(self.app)
-        second_visitor.get("/foreign")
-        second_visitor.close()
+        self.record_browser_view("browser-user-0001", "/")
+        self.record_browser_view("browser-user-0001", "/")
+        self.record_browser_view("browser-user-0002", "/foreign")
 
         self.register("刘同学")
         self.client.post(
@@ -204,7 +232,7 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn("管理后台", dashboard.text)
         self.assertIn('data-metric="today-visitors">2', dashboard.text)
-        self.assertIn('data-metric="today-views">4', dashboard.text)
+        self.assertIn('data-metric="today-views">3', dashboard.text)
         self.assertIn("后台待审核帖子", dashboard.text)
         self.assertIn("<svg", dashboard.text)
 

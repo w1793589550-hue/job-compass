@@ -19,7 +19,7 @@ def _date_key(value: datetime) -> str:
 
 
 def _empty_data() -> dict:
-    return {"version": 1, "visitors": {}, "daily": {}}
+    return {"version": 2, "browserVisitors": {}, "browserDaily": {}}
 
 
 def _series(daily: dict, now: datetime, days: int = 14) -> list[dict]:
@@ -59,7 +59,10 @@ class JsonAnalyticsStore:
         except FileNotFoundError:
             loaded = {}
         self.data = {**_empty_data(), **loaded}
-        for period in self.data["daily"].values():
+        self.data["version"] = 2
+        self.data.setdefault("browserVisitors", {})
+        self.data.setdefault("browserDaily", {})
+        for period in self.data["browserDaily"].values():
             visitors = period.get("visitors", [])
             period["visitors"] = list(visitors) if isinstance(visitors, dict) else list(visitors)
             period.setdefault("views", 0)
@@ -76,10 +79,10 @@ class JsonAnalyticsStore:
         iso = instant.isoformat().replace("+00:00", "Z")
         day = _date_key(instant)
         with self._lock:
-            visitor = self.data["visitors"].setdefault(visitor_id, {"firstSeen": iso, "lastSeen": iso, "views": 0})
+            visitor = self.data["browserVisitors"].setdefault(visitor_id, {"firstSeen": iso, "lastSeen": iso, "views": 0})
             visitor["lastSeen"] = iso
             visitor["views"] += 1
-            period = self.data["daily"].setdefault(day, {"views": 0, "visitors": [], "paths": {}})
+            period = self.data["browserDaily"].setdefault(day, {"views": 0, "visitors": [], "paths": {}})
             period["views"] += 1
             if visitor_id not in period["visitors"]:
                 period["visitors"].append(visitor_id)
@@ -88,18 +91,18 @@ class JsonAnalyticsStore:
 
     def summary(self, now: datetime | None = None) -> dict:
         instant = now or _now()
-        today = self.data["daily"].get(_date_key(instant), {})
-        daily = _series(self.data["daily"], instant)
+        today = self.data["browserDaily"].get(_date_key(instant), {})
+        daily = _series(self.data["browserDaily"], instant)
         page_counts = {}
         total_views = 0
-        for period in self.data["daily"].values():
+        for period in self.data["browserDaily"].values():
             total_views += int(period.get("views", 0))
             for path, count in period.get("paths", {}).items():
                 page_counts[path] = page_counts.get(path, 0) + int(count)
         return {
             "totals": {
                 "views": total_views,
-                "visitors": len(self.data["visitors"]),
+                "visitors": len(self.data["browserVisitors"]),
                 "todayViews": int(today.get("views", 0)),
                 "todayVisitors": len(today.get("visitors", [])),
             },
@@ -120,13 +123,13 @@ class MySqlAnalyticsStore:
         instant = (now or _now()).replace(tzinfo=None)
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
-                """INSERT INTO analytics_visitors (visitor_id,first_seen,last_seen,views)
+                """INSERT INTO browser_analytics_visitors (visitor_id,first_seen,last_seen,views)
                    VALUES (%s,%s,%s,1)
                    ON DUPLICATE KEY UPDATE last_seen=VALUES(last_seen),views=views+1""",
                 (visitor_id, instant, instant),
             )
             cursor.execute(
-                "INSERT INTO analytics_page_views (visitor_id,page_path,viewed_at) VALUES (%s,%s,%s)",
+                "INSERT INTO browser_analytics_page_views (visitor_id,page_path,viewed_at) VALUES (%s,%s,%s)",
                 (visitor_id, page_path[:255], instant),
             )
 
@@ -136,11 +139,11 @@ class MySqlAnalyticsStore:
         next_day_utc = (local_today + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
         series_start = (local_today - timedelta(days=13)).astimezone(timezone.utc).replace(tzinfo=None)
         with self._connect() as connection, connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) count FROM analytics_page_views")
+            cursor.execute("SELECT COUNT(*) count FROM browser_analytics_page_views")
             total_views = int(cursor.fetchone()["count"])
-            cursor.execute("SELECT COUNT(*) count FROM analytics_visitors")
+            cursor.execute("SELECT COUNT(*) count FROM browser_analytics_visitors")
             total_visitors = int(cursor.fetchone()["count"])
-            cursor.execute("SELECT visitor_id,page_path,viewed_at FROM analytics_page_views WHERE viewed_at >= %s AND viewed_at < %s", (series_start, next_day_utc))
+            cursor.execute("SELECT visitor_id,page_path,viewed_at FROM browser_analytics_page_views WHERE viewed_at >= %s AND viewed_at < %s", (series_start, next_day_utc))
             rows = cursor.fetchall()
         daily_map = {}
         page_counts = {}

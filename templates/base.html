@@ -50,5 +50,29 @@
       <div class="server-notice {% if error %}error{% endif %}" role="status"><span>{{ error or message }}</span><a href="{{ request.url.path }}" aria-label="关闭提示">×</a></div>
     {% endif %}
     {% block content %}{% endblock %}
+    {% if track_browser_analytics %}
+      <script>
+        (() => {
+          const key = "jobCompassBrowserVisitor";
+          let visitorId = "";
+          try {
+            visitorId = localStorage.getItem(key) || crypto.randomUUID();
+            localStorage.setItem(key, visitorId);
+          } catch {
+            visitorId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          }
+          const body = JSON.stringify({ visitorId, path: window.location.pathname });
+          const blob = new Blob([body], { type: "application/json" });
+          if (navigator.sendBeacon && navigator.sendBeacon("/analytics/page-view", blob)) return;
+          fetch("/analytics/page-view", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+            credentials: "same-origin",
+            keepalive: true,
+          }).catch(() => {});
+        })();
+      </script>
+    {% endif %}
   </body>
 </html>
