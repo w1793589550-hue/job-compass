@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}职路 · 投递进度{% endblock %}
+{% block content %}
+<main class="product-main">
+  <header class="page-heading">
+    <div><span class="eyebrow">APPLICATION TRACKER</span><h1>投递进度</h1><p>用阶段、截止时间和下一步行动管理每一个真实机会。</p></div>
+    <a class="primary-command" href="#new-application">添加投递</a>
+  </header>
+
+  <section class="application-overview" aria-label="投递统计">
+    {% for status in ['planned','applied','assessment','interview','offer','closed'] %}
+      <a href="/applications?status={{ status }}" class="{% if status_filter == status %}active{% endif %}"><span>{{ status_labels[status] }}</span><strong>{{ application_summary.counts[status] }}</strong></a>
+    {% endfor %}
+  </section>
+
+  <div class="applications-layout">
+    <section class="workspace-section applications-list-section">
+      <div class="section-heading application-list-heading">
+        <div><span class="eyebrow">PIPELINE</span><h2>{% if status_filter %}{{ status_labels[status_filter] }}{% else %}全部投递{% endif %}</h2></div>
+        <form class="application-search" method="get" action="/applications"><input type="search" name="q" value="{{ query }}" placeholder="搜索企业或岗位" /><button class="secondary-command" type="submit">搜索</button></form>
+      </div>
+      <nav class="filter-tabs" aria-label="投递状态筛选"><a href="/applications" class="{% if not status_filter %}active{% endif %}">全部</a>{% for status in application_statuses %}<a href="/applications?status={{ status }}" class="{% if status_filter == status %}active{% endif %}">{{ status_labels[status] }}</a>{% endfor %}</nav>
+
+      {% if applications %}
+        <div class="application-list">
+          {% for item in applications %}
+            <article class="application-item">
+              <div class="application-main">
+                <div class="application-title"><span class="status-dot status-{{ item.status }}"></span><div><h3>{{ item.company }}</h3><p>{{ item.role }}{% if item.city %} · {{ item.city }}{% endif %}</p></div></div>
+                <dl>
+                  <div><dt>当前阶段</dt><dd><span class="status-pill status-{{ item.status }}">{{ status_labels[item.status] }}</span></dd></div>
+                  <div><dt>投递截止</dt><dd>{{ item.deadline or '未设置' }}</dd></div>
+                  <div><dt>下一步</dt><dd>{{ item.nextAction or '待补充' }}{% if item.nextActionAt %}<small>{{ item.nextActionAt }}</small>{% endif %}</dd></div>
+                  <div><dt>来源</dt><dd>{% if item.sourceUrl %}<a href="{{ item.sourceUrl }}" target="_blank" rel="noopener noreferrer">{{ item.sourceType or '查看原链接' }}</a>{% else %}{{ item.sourceType or '未记录' }}{% endif %}</dd></div>
+                </dl>
+                {% if item.notes %}<p class="application-notes">{{ item.notes }}</p>{% endif %}
+                <details class="application-edit">
+                  <summary>编辑跟进信息</summary>
+                  <form method="post" action="/applications/{{ item.id }}/update" class="product-form">
+                    <input type="hidden" name="status" value="{{ item.status }}" />
+                    <div class="form-row"><label><span>下一步行动</span><input name="next_action" value="{{ item.nextAction }}" maxlength="255" /></label><label><span>下次跟进</span><input name="next_action_at" type="date" value="{{ item.nextActionAt }}" /></label></div>
+                    <label><span>备注</span><textarea name="notes" rows="3" maxlength="2000">{{ item.notes }}</textarea></label>
+                    <button class="secondary-command" type="submit">保存跟进信息</button>
+                  </form>
+                </details>
+              </div>
+              <div class="application-actions">
+                <form method="post" action="/applications/{{ item.id }}/status"><label><span>更新阶段</span><select name="status">{% for status in application_statuses %}<option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status_labels[status] }}</option>{% endfor %}</select></label><button class="secondary-command" type="submit">保存</button></form>
+                <form method="post" action="/applications/{{ item.id }}/delete"><button class="danger-command" type="submit">删除</button></form>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state"><strong>暂无投递记录</strong><span>{% if query or status_filter %}当前筛选条件下没有结果。{% else %}先把一个准备投递的企业加入看板。{% endif %}</span><a href="#new-application">添加投递</a></div>
+      {% endif %}
+    </section>
+
+    <aside class="workspace-section new-application" id="new-application">
+      <div class="section-heading"><div><span class="eyebrow">NEW ITEM</span><h2>添加投递记录</h2></div></div>
+      <form method="post" action="/applications" class="product-form">
+        <label><span>企业名称</span><input name="company" maxlength="160" required /></label>
+        <label><span>岗位名称</span><input name="role" maxlength="160" required /></label>
+        <label><span>工作城市</span><input name="city" maxlength="80" /></label>
+        <label><span>来源类型</span><select name="source_type"><option>企业官网</option><option>公共就业平台</option><option>招聘平台</option><option>内推</option><option>校园宣讲</option><option>其他</option></select></label>
+        <label><span>岗位来源链接</span><input name="source_url" type="url" placeholder="https://" /></label>
+        <label><span>当前阶段</span><select name="status">{% for status in application_statuses %}<option value="{{ status }}">{{ status_labels[status] }}</option>{% endfor %}</select></label>
+        <div class="form-row"><label><span>投递截止</span><input name="deadline" type="date" /></label><label><span>下次跟进</span><input name="next_action_at" type="date" /></label></div>
+        <label><span>下一步行动</span><input name="next_action" maxlength="255" placeholder="例如：完善项目经历" /></label>
+        <label><span>备注</span><textarea name="notes" rows="4" maxlength="2000" placeholder="记录岗位要求、联系人或准备重点"></textarea></label>
+        <button class="primary-command full" type="submit">保存投递记录</button>
+      </form>
+    </aside>
+  </div>
+</main>
+{% endblock %}

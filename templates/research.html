@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}职路 · 核验历史{% endblock %}
+{% block content %}
+<main class="product-main">
+  <header class="page-heading">
+    <div><span class="eyebrow">VERIFICATION LIBRARY</span><h1>核验历史</h1><p>回看每次使用的条件、结果表格和公开来源。</p></div>
+    <a class="primary-command" href="/discover">新建核验</a>
+  </header>
+
+  <section class="workspace-section research-library">
+    <div class="section-heading"><div><span class="eyebrow">SAVED RESULTS</span><h2>我的核验清单</h2></div><span class="state-badge">{{ records|length }} 份</span></div>
+    {% if records %}
+      <div class="research-library-list">
+        {% for record in records %}
+          <article>
+            <a class="research-record-main" href="/research/{{ record.id }}">
+              <time>{{ record.createdAt[:10] }}<small>{{ record.createdAt[11:16] }}</small></time>
+              <div><h3>{{ record.title }}</h3><p>{{ record.query.identity or '未限定身份' }} · {{ record.query.count or '不限' }} 家候选 · {{ record.sources|length }} 个公开来源</p></div>
+              <span>查看结果</span>
+            </a>
+            <form method="post" action="/research/{{ record.id }}/delete"><button class="danger-command" type="submit">删除</button></form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><strong>还没有核验历史</strong><span>登录状态下完成机会核验，结果会自动保存在这里。</span><a href="/discover">开始首次核验</a></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

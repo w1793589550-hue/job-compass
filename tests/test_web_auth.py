@@ -85,14 +85,102 @@ class WebAuthenticationTests(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         for expected in (
-            "求职门户工作台",
-            "我的待办任务",
-            "画像信息",
-            "求职日程安排",
-            "常用资料下载",
-            "企业核验",
+            "从核验机会到拿到 offer",
+            "机会核验",
+            "投递进度",
+            "求职社区",
         ):
             self.assertIn(expected, page.text)
+
+    def test_logged_in_home_is_a_real_account_dashboard(self):
+        self.register("刘同学")
+
+        page = self.client.get("/")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("刘同学的求职工作台", page.text)
+        self.assertIn("画像完成度", page.text)
+        self.assertIn("暂无投递记录", page.text)
+        self.assertIn('href="/applications"', page.text)
+        self.assertIn('href="/profile"', page.text)
+
+    def test_profile_and_application_state_persist_for_the_account(self):
+        self.register("刘同学")
+
+        profile = self.client.post(
+            "/profile",
+            data={
+                "city": "天津市",
+                "identity": "2027 届毕业生",
+                "graduation_year": "2027",
+                "education": "本科",
+                "major": "计算机科学与技术",
+                "roles": "AI 产品经理、数据分析",
+                "industries": "人工智能、软件服务",
+                "salary": "8k-12k",
+                "work_style": "全职",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(profile.status_code, 200)
+        self.assertIn("画像已保存", profile.text)
+        self.assertIn("计算机科学与技术", profile.text)
+
+        created = self.client.post(
+            "/applications",
+            data={
+                "company": "海河智能科技",
+                "role": "AI 产品实习生",
+                "city": "天津市",
+                "source_url": "https://example.com/jobs/ai-product",
+                "source_type": "企业官网",
+                "status": "planned",
+                "deadline": "2027-03-01",
+                "next_action": "完善项目经历",
+                "next_action_at": "2027-02-20",
+                "notes": "重点核验岗位是否面向应届生",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(created.status_code, 200)
+        self.assertIn("投递记录已添加", created.text)
+        self.assertIn("海河智能科技", created.text)
+        self.assertIn("AI 产品实习生", created.text)
+
+        application_id = next(iter(self.app.state.career.data["applications"]))
+        moved = self.client.post(
+            f"/applications/{application_id}/status",
+            data={"status": "interview"},
+            follow_redirects=True,
+        )
+        self.assertEqual(moved.status_code, 200)
+        self.assertIn("进度已更新", moved.text)
+        self.assertIn("面试中", moved.text)
+
+        followed_up = self.client.post(
+            f"/applications/{application_id}/update",
+            data={
+                "status": "interview",
+                "next_action": "准备案例面试",
+                "next_action_at": "2027-02-25",
+                "notes": "重点复盘需求分析过程",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(followed_up.status_code, 200)
+        self.assertIn("跟进信息已保存", followed_up.text)
+        self.assertIn("准备案例面试", followed_up.text)
+
+        dashboard = self.client.get("/")
+        self.assertIn("海河智能科技", dashboard.text)
+        self.assertIn("1 个进行中", dashboard.text)
+
+    def test_private_career_pages_require_login(self):
+        for path in ("/profile", "/applications", "/research"):
+            with self.subTest(path=path):
+                response = self.client.get(path, follow_redirects=False)
+                self.assertEqual(response.status_code, 303)
+                self.assertTrue(response.headers["location"].startswith("/login?next="))
 
     def record_browser_view(self, visitor_id, path):
         return self.client.post(
@@ -180,8 +268,41 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertIn("attachment", export.headers["content-disposition"])
         self.assertIn("Company,Acme Ltd,[1]", export.text)
 
+    def test_successful_company_research_is_saved_to_the_user_library(self):
+        class SavedResearch:
+            async def research_companies(inner_self, profile):
+                return SimpleNamespace(
+                    content="### 海河智能科技\n\n| 项目 | 信息 |\n| :--- | :--- |\n| 岗位 | AI 产品实习生 |",
+                    sources=[SimpleNamespace(title="企业招聘页", url="https://example.com/careers")],
+                    error="",
+                )
+
+        self.register("刘同学")
+        self.app.state.research = SavedResearch()
+        result = self.client.post(
+            "/generate",
+            data={
+                "city": "天津市", "identity": "应届毕业生", "age": "22", "count": "5",
+                "modes": ["balanced"], "model": "deepseek-v4-flash", "roles": "AI 产品", "notes": "",
+            },
+        )
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("已保存到核验历史", result.text)
+        match = re.search(r'href="(/research/[^"]+)"', result.text)
+        self.assertIsNotNone(match)
+
+        library = self.client.get("/research")
+        self.assertIn("天津市 · AI 产品", library.text)
+        self.assertIn("海河智能科技", self.client.get(match.group(1)).text)
+
+        export_match = re.search(r'href="(/downloads/results/[^"]+\.csv)"', result.text)
+        self.assertIsNotNone(export_match)
+        self.client.cookies.clear()
+        self.assertEqual(self.client.get(export_match.group(1)).status_code, 404)
+
     def test_filter_modes_are_multi_select_and_company_count_has_no_upper_limit(self):
-        page = self.client.get("/")
+        page = self.client.get("/discover")
         self.assertEqual(page.text.count('name="modes"'), 3)
         self.assertNotIn('name="count" type="number" min="1" max=', page.text)
 

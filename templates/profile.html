@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}职路 · 求职画像{% endblock %}
+{% block content %}
+<main class="product-main">
+  <header class="page-heading">
+    <div><span class="eyebrow">CAREER PROFILE</span><h1>求职画像</h1><p>这些信息用于预填核验条件，不会公开展示给其他用户。</p></div>
+    <div class="profile-score"><span>完成度</span><strong>{{ profile_completion }}%</strong></div>
+  </header>
+
+  <div class="profile-layout">
+    <section class="workspace-section">
+      <div class="section-heading"><div><span class="eyebrow">PREFERENCES</span><h2>目标与偏好</h2></div></div>
+      <form method="post" action="/profile" class="product-form form-grid">
+        <label><span>目标城市</span><input name="city" value="{{ profile.city }}" placeholder="例如：天津、北京" /></label>
+        <label><span>当前身份</span><input name="identity" value="{{ profile.identity }}" placeholder="例如：2027 届毕业生" /></label>
+        <label><span>毕业年份</span><input name="graduation_year" value="{{ profile.graduationYear }}" inputmode="numeric" placeholder="2027" /></label>
+        <label><span>最高学历</span><select name="education"><option value="">请选择</option>{% for value in ['专科','本科','硕士','博士','其他'] %}<option {% if profile.education == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+        <label class="form-wide"><span>专业</span><input name="major" value="{{ profile.major }}" placeholder="填写专业全称" /></label>
+        <label class="form-wide"><span>目标岗位</span><input name="roles" value="{{ profile.roles }}" placeholder="可填写多个，例如：AI 产品经理、数据分析" /></label>
+        <label class="form-wide"><span>目标行业</span><input name="industries" value="{{ profile.industries }}" placeholder="例如：人工智能、软件服务、智能制造" /></label>
+        <label><span>期望薪资</span><input name="salary" value="{{ profile.salary }}" placeholder="例如：8k-12k" /></label>
+        <label><span>工作方式</span><select name="work_style"><option value="">请选择</option>{% for value in ['全职','实习','兼职','远程优先','均可'] %}<option {% if profile.workStyle == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+        <button class="primary-command full form-wide" type="submit">保存求职画像</button>
+      </form>
+    </section>
+
+    <aside class="workspace-section profile-account">
+      <div class="section-heading"><div><span class="eyebrow">ACCOUNT</span><h2>账号信息</h2></div></div>
+      <div class="account-summary"><span class="user-avatar large-avatar">{{ avatar_initial }}</span><div><strong>{{ current_user.displayName }}</strong><small>{{ role_label }} · {{ current_user.phoneMasked }}</small></div></div>
+      <dl>
+        <div><dt>注册时间</dt><dd>{{ current_user.createdAt[:10] }}</dd></div>
+        <div><dt>数据存储</dt><dd>账号私有</dd></div>
+        <div><dt>简历正文</dt><dd>不落盘保存</dd></div>
+      </dl>
+      <a class="secondary-command full" href="/privacy">查看隐私政策</a>
+    </aside>
+  </div>
+</main>
+{% endblock %}

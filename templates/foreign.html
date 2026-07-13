@@ -1,25 +1,31 @@
 {% extends "base.html" %}
-{% block title %}职路 · 外企求职{% endblock %}
-{% block body_class %}foreign-page{% endblock %}
+{% block title %}职路 · 外企简历分析{% endblock %}
 {% block content %}
-<main class="foreign-workspace">
-  <section class="foreign-hero">
-    <div><span class="eyebrow">FOREIGN COMPANY CAREER DESK</span><h1>先读懂你的经历，<br /><em>再找真正适合的岗位</em></h1><p>简历解析、岗位匹配和模型调用都在 Python 服务端完成，页面不依赖浏览器脚本。</p></div>
-    <div class="foreign-method-card"><span>01</span><strong>导入简历</strong><i></i><span>02</span><strong>提取能力</strong><i></i><span>03</span><strong>给出方向</strong></div>
-  </section>
-  <section class="forum-panel server-main-panel">
-    <div class="forum-panel-head"><div><span class="eyebrow">RESUME PROFILE</span><h2>导入并分析简历</h2></div><span class="privacy-badge">不落盘保存</span></div>
-    <form method="post" action="/foreign/analyze" enctype="multipart/form-data" class="forum-form server-filter-grid">
-      <label><span>简历文件</span><input name="resume_file" type="file" accept=".pdf,.docx,.txt,.md" /></label>
-      <label><span>目标城市</span><input name="city" value="天津市" /></label>
-      <label><span>英语使用能力</span><select name="english"><option>不知道，按岗位原文核验</option><option>可处理英文邮件</option><option>可参与日常英语沟通</option><option>可进行商务英语沟通</option></select></label>
-      <label><span>DeepSeek 模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
-      <label class="server-wide"><span>偏向岗位</span><input name="roles" placeholder="例如：采购助理、HR、订单管理" /></label>
-      <label class="server-wide"><span>简历文字或补充说明</span><textarea name="resume_text" rows="10" placeholder="也可以直接粘贴简历正文"></textarea></label>
-      <label class="privacy-consent server-wide"><input name="privacy_consent" value="accepted" type="checkbox" required /><span>我已阅读<a href="/privacy" target="_blank">隐私政策</a>，同意本次内容发送给 DeepSeek API 进行分析。</span></label>
-      <button class="generate-button server-wide" type="submit"><span>分析简历并推荐岗位方向</span><b aria-hidden="true">→</b></button>
-    </form>
-  </section>
+<main class="product-main">
+  <header class="page-heading">
+    <div><span class="eyebrow">FOREIGN COMPANY CAREER DESK</span><h1>外企简历方向分析</h1><p>先识别经历和能力，再判断更合适的岗位方向与检索关键词。</p></div>
+    <span class="privacy-badge">简历正文不落盘</span>
+  </header>
+
+  <div class="resume-layout">
+    <section class="workspace-section">
+      <div class="section-heading"><div><span class="eyebrow">RESUME PROFILE</span><h2>导入简历与求职目标</h2></div></div>
+      <form method="post" action="/foreign/analyze" enctype="multipart/form-data" class="product-form form-grid" data-loading>
+        <label><span>简历文件</span><input name="resume_file" type="file" accept=".pdf,.docx,.txt,.md" /></label>
+        <label><span>目标城市</span><input name="city" value="天津市" /></label>
+        <label><span>英语使用能力</span><select name="english"><option>不知道，按岗位原文核验</option><option>可处理英文邮件</option><option>可参与日常英语沟通</option><option>可进行商务英语沟通</option></select></label>
+        <label><span>分析模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
+        <label class="form-wide"><span>偏向岗位</span><input name="roles" placeholder="例如：采购助理、HR、订单管理" /></label>
+        <label class="form-wide"><span>简历文字或补充说明</span><textarea name="resume_text" rows="12" placeholder="也可以直接粘贴简历正文"></textarea></label>
+        <label class="privacy-consent form-wide"><input name="privacy_consent" value="accepted" type="checkbox" required /><span>我已阅读<a href="/privacy" target="_blank">隐私政策</a>，同意本次内容发送给 DeepSeek API 进行分析。</span></label>
+        <button class="primary-command full form-wide submit-command" type="submit"><span>分析简历并推荐岗位方向</span><i class="loading-spinner" aria-hidden="true"></i></button>
+      </form>
+    </section>
+    <aside class="workspace-section resume-process">
+      <div class="section-heading"><div><span class="eyebrow">PROCESS</span><h2>本次分析怎么进行</h2></div></div>
+      <ol><li><span>01</span><div><strong>读取内容</strong><small>仅在当前请求中提取 PDF、DOCX 或文本</small></div></li><li><span>02</span><div><strong>归纳能力</strong><small>识别经历、技能和可迁移能力</small></div></li><li><span>03</span><div><strong>匹配方向</strong><small>给出岗位方向、关键词和准备建议</small></div></li></ol>
+      <a class="secondary-command full" href="/privacy">查看数据处理说明</a>
+    </aside>
+  </div>
 </main>
 {% endblock %}
-

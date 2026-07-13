@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}职路 · 登录与注册{% endblock %}
+{% block content %}
+<main class="auth-main">
+  <section class="auth-context">
+    <a class="product-brand large" href="/"><img src="/static/brand-logo-v2.png" alt="" /><span><strong>职路</strong><small>Job Compass</small></span></a>
+    <span class="eyebrow">YOUR CAREER DATA</span>
+    <h1>让每次核验和每条投递，<br />都回到同一个账号</h1>
+    <ul>
+      <li><strong>求职画像</strong><span>自动带入城市、身份和岗位偏好</span></li>
+      <li><strong>投递看板</strong><span>统一管理阶段、截止日期和下一步行动</span></li>
+      <li><strong>核验历史</strong><span>保存结果表格和当时使用的公开来源</span></li>
+    </ul>
+  </section>
+  <section class="auth-panel">
+    <nav class="auth-tabs" aria-label="账号操作">
+      <a href="/login?next={{ next_url }}" class="{% if auth_mode != 'register' %}active{% endif %}">登录</a>
+      <a href="/login?mode=register&next={{ next_url }}" class="{% if auth_mode == 'register' %}active{% endif %}">注册</a>
+    </nav>
+    {% if auth_mode == 'register' %}
+      <div class="section-heading"><div><span class="eyebrow">CREATE ACCOUNT</span><h2>建立求职工作台</h2></div></div>
+      <form method="post" action="/auth/register" class="product-form">
+        <input type="hidden" name="next" value="{{ next_url }}" />
+        <label><span>手机号</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="11 位手机号" required /></label>
+        <label><span>密码</span><input name="password" type="password" minlength="6" autocomplete="new-password" placeholder="至少 6 位" required /></label>
+        <label><span>昵称</span><input name="display_name" maxlength="20" autocomplete="nickname" required /></label>
+        <label><span>当前身份</span><select name="role">{% for value, label in roles.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+        <button class="primary-command full" type="submit">注册并进入工作台</button>
+      </form>
+      <p class="auth-footnote">注册即表示你已阅读并同意<a href="/privacy">隐私政策</a>。</p>
+    {% else %}
+      <div class="section-heading"><div><span class="eyebrow">WELCOME BACK</span><h2>登录职路账号</h2></div></div>
+      <form method="post" action="/auth/login" class="product-form">
+        <input type="hidden" name="next" value="{{ next_url }}" />
+        <label><span>手机号</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" required autofocus /></label>
+        <label><span>密码</span><input name="password" type="password" minlength="6" autocomplete="current-password" required /></label>
+        <button class="primary-command full" type="submit">登录</button>
+      </form>
+      <p class="auth-footnote">还没有账号？<a href="/login?mode=register&next={{ next_url }}">免费建立工作台</a></p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

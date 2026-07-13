@@ -1,8 +1,9 @@
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -12,6 +13,13 @@ from fastapi.templating import Jinja2Templates
 
 from job_compass.forum_store import ForumStore
 from job_compass.analytics_store import JsonAnalyticsStore, MySqlAnalyticsStore, chart_points
+from job_compass.career_store import (
+    APPLICATION_STATUSES,
+    JsonCareerStore,
+    MySqlCareerStore,
+    application_summary,
+    profile_completeness,
+)
 from job_compass.mysql_store import MySqlForumStore, mysql_config_from_env
 from job_compass.result_renderer import render_result_content, result_tables_to_csv
 from job_compass.research import ResearchService, extract_resume, load_local_env
@@ -29,6 +37,14 @@ ROLES = {
     "boss": "老板 / HR",
     "observer": "旁观交流者",
 }
+STATUS_LABELS = {
+    "planned": "待投递",
+    "applied": "已投递",
+    "assessment": "笔试 / 测评",
+    "interview": "面试中",
+    "offer": "已获 Offer",
+    "closed": "已结束",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -44,13 +60,21 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         os.getenv("FORUM_PHONE_HASH_SECRET", ""),
     )
     app.state.storage_backend = "mysql" if mysql_config else "json"
+    career_file = data_file.with_name("career.json") if data_file else Path(os.getenv("CAREER_DATA_FILE", ROOT / "data" / "career.json"))
+    app.state.career = MySqlCareerStore(mysql_config) if mysql_config else JsonCareerStore(career_file)
     analytics_file = (data_file.with_name("analytics.json") if data_file else Path(os.getenv("ANALYTICS_DATA_FILE", ROOT / "data" / "analytics.json")))
     app.state.analytics = MySqlAnalyticsStore(mysql_config) if mysql_config else JsonAnalyticsStore(analytics_file)
     app.state.research = ResearchService()
     app.state.result_exports = {}
     app.mount("/static", StaticFiles(directory=ROOT / "public"), name="static")
     templates = Jinja2Templates(directory=ROOT / "templates")
-    tracked_pages = {"/", "/foreign", "/foreign.html", "/forum", "/forum.html", "/privacy", "/privacy.html"}
+    tracked_pages = {
+        "/", "/discover", "/applications", "/profile", "/research", "/foreign", "/foreign.html",
+        "/forum", "/forum.html", "/privacy", "/privacy.html", "/login",
+    }
+
+    def trackable_page(path: str) -> bool:
+        return path in tracked_pages or path.startswith("/research/")
 
     def current_user(request: Request) -> dict | None:
         token = request.cookies.get(SESSION_COOKIE, "")
@@ -69,19 +93,20 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             "admin_mode": admin_mode(request),
             "avatar_initial": (user.get("displayName", "用").strip() or "用")[0] if user else "用",
             "role_label": ROLES.get(user.get("role"), "用户") if user else "",
-            "track_browser_analytics": request.method == "GET" and request.url.path in tracked_pages,
+            "track_browser_analytics": request.method == "GET" and trackable_page(request.url.path),
+            "status_labels": STATUS_LABELS,
             "message": request.query_params.get("message", ""),
             "error": request.query_params.get("error", ""),
             **values,
         }
 
-    def result_view_values(result) -> dict:
+    def result_view_values(result, owner_id: str = "") -> dict:
         rendered_result = render_result_content(result.content) if not result.error else ""
         export_csv = result_tables_to_csv(result.content) if not result.error else ""
         result_export_id = ""
         if export_csv:
             result_export_id = str(uuid4())
-            app.state.result_exports[result_export_id] = export_csv
+            app.state.result_exports[result_export_id] = {"content": export_csv, "ownerId": owner_id}
             while len(app.state.result_exports) > 50:
                 app.state.result_exports.pop(next(iter(app.state.result_exports)))
         return {"rendered_result": rendered_result, "result_export_id": result_export_id}
@@ -89,9 +114,266 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
     def safe_next(value: str, fallback: str = "/") -> str:
         return value if value.startswith("/") and not value.startswith("//") else fallback
 
+    def require_user(request: Request) -> tuple[dict | None, RedirectResponse | None]:
+        user = current_user(request)
+        if user:
+            return user, None
+        destination = quote(request.url.path, safe="/")
+        return None, RedirectResponse(f"/login?next={destination}", 303)
+
+    def clean_date(value: str) -> str:
+        value = value.strip()
+        if not value:
+            return ""
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+        except ValueError as error:
+            raise ValueError("日期格式必须为 YYYY-MM-DD。") from error
+
+    def dashboard_values(user: dict) -> dict:
+        profile = app.state.career.profile(user["id"])
+        applications = app.state.career.list_applications(user["id"])
+        summary = application_summary(applications)
+        researches = app.state.career.list_researches(user["id"])
+        completion = profile_completeness(profile)
+        tasks = []
+        if completion < 100:
+            tasks.append({"title": "完善求职画像", "detail": f"当前完成度 {completion}%", "href": "/profile"})
+        if not researches:
+            tasks.append({"title": "完成首次机会核验", "detail": "用公开来源建立候选清单", "href": "/discover"})
+        if not applications:
+            tasks.append({"title": "建立第一条投递记录", "detail": "开始管理截止时间和进度", "href": "/applications#new-application"})
+        for item in summary["upcoming"][:3]:
+            tasks.append({
+                "title": item.get("nextAction") or "跟进求职进度",
+                "detail": f"{item['company']} · {item['nextActionAt']}",
+                "href": "/applications",
+            })
+        return {
+            "profile": profile,
+            "profile_completion": completion,
+            "applications": applications,
+            "application_summary": summary,
+            "recent_researches": researches[:4],
+            "research_count": len(researches),
+            "tasks": tasks[:5],
+        }
+
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
-        return templates.TemplateResponse(request, "home.html", context(request))
+        user = current_user(request)
+        values = dashboard_values(user) if user else {
+            "public_forum_summary": app.state.store.summary(),
+        }
+        return templates.TemplateResponse(request, "home.html", context(request, **values))
+
+    @app.get("/login", response_class=HTMLResponse)
+    async def login_page(request: Request):
+        if current_user(request):
+            return RedirectResponse(safe_next(request.query_params.get("next", "/")), 303)
+        return templates.TemplateResponse(request, "auth.html", context(
+            request,
+            auth_mode=request.query_params.get("mode", "login"),
+            next_url=safe_next(request.query_params.get("next", "/")),
+            roles=ROLES,
+        ))
+
+    @app.get("/discover", response_class=HTMLResponse)
+    async def discover(request: Request):
+        user = current_user(request)
+        profile = app.state.career.profile(user["id"]) if user else {}
+        researches = app.state.career.list_researches(user["id"])[:5] if user else []
+        return templates.TemplateResponse(request, "discover.html", context(
+            request, profile=profile, recent_researches=researches,
+        ))
+
+    @app.get("/profile", response_class=HTMLResponse)
+    async def profile_page(request: Request):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        profile = app.state.career.profile(user["id"])
+        return templates.TemplateResponse(request, "profile.html", context(
+            request, profile=profile, profile_completion=profile_completeness(profile),
+        ))
+
+    @app.post("/profile")
+    async def save_profile(
+        request: Request,
+        city: str = Form(""),
+        identity: str = Form(""),
+        graduation_year: str = Form(""),
+        education: str = Form(""),
+        major: str = Form(""),
+        roles: str = Form(""),
+        industries: str = Form(""),
+        salary: str = Form(""),
+        work_style: str = Form(""),
+    ):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        values = {
+            "city": city.strip()[:80],
+            "identity": identity.strip()[:80],
+            "graduationYear": graduation_year.strip()[:12],
+            "education": education.strip()[:40],
+            "major": major.strip()[:120],
+            "roles": roles.strip()[:400],
+            "industries": industries.strip()[:400],
+            "salary": salary.strip()[:80],
+            "workStyle": work_style.strip()[:80],
+        }
+        app.state.career.save_profile(user["id"], values)
+        return RedirectResponse("/profile?message=" + quote("画像已保存。"), 303)
+
+    @app.get("/applications", response_class=HTMLResponse)
+    async def applications_page(request: Request):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        status = request.query_params.get("status", "")
+        query = request.query_params.get("q", "")[:100]
+        if status and status not in APPLICATION_STATUSES:
+            status = ""
+        all_applications = app.state.career.list_applications(user["id"])
+        applications = app.state.career.list_applications(user["id"], status=status, query=query)
+        return templates.TemplateResponse(request, "applications.html", context(
+            request,
+            applications=applications,
+            application_summary=application_summary(all_applications),
+            status_filter=status,
+            query=query,
+            application_statuses=APPLICATION_STATUSES,
+        ))
+
+    @app.post("/applications")
+    async def create_application(
+        request: Request,
+        company: str = Form(""),
+        role: str = Form(""),
+        city: str = Form(""),
+        source_url: str = Form(""),
+        source_type: str = Form(""),
+        status: str = Form("planned"),
+        deadline: str = Form(""),
+        next_action: str = Form(""),
+        next_action_at: str = Form(""),
+        notes: str = Form(""),
+    ):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        clean_company = " ".join(company.split())[:160]
+        clean_role = " ".join(role.split())[:160]
+        if len(clean_company) < 2 or len(clean_role) < 2:
+            return RedirectResponse("/applications?error=" + quote("请填写有效的企业和岗位名称。"), 303)
+        source_url = source_url.strip()[:1000]
+        if source_url and urlparse(source_url).scheme not in {"http", "https"}:
+            return RedirectResponse("/applications?error=" + quote("来源链接必须以 http:// 或 https:// 开头。"), 303)
+        try:
+            values = {
+                "company": clean_company,
+                "role": clean_role,
+                "city": city.strip()[:80],
+                "sourceUrl": source_url,
+                "sourceType": source_type.strip()[:60],
+                "status": status,
+                "deadline": clean_date(deadline),
+                "nextAction": next_action.strip()[:255],
+                "nextActionAt": clean_date(next_action_at),
+                "notes": notes.strip()[:2000],
+            }
+            app.state.career.create_application(user["id"], values)
+        except ValueError as error:
+            return RedirectResponse("/applications?error=" + quote(str(error)), 303)
+        return RedirectResponse("/applications?message=" + quote("投递记录已添加。"), 303)
+
+    @app.post("/applications/{application_id}/status")
+    async def update_application_status(request: Request, application_id: str, status: str = Form("")):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        try:
+            app.state.career.update_application(user["id"], application_id, {"status": status})
+        except ValueError as error:
+            return RedirectResponse("/applications?error=" + quote(str(error)), 303)
+        return RedirectResponse("/applications?message=" + quote("进度已更新。"), 303)
+
+    @app.post("/applications/{application_id}/update")
+    async def update_application(
+        request: Request,
+        application_id: str,
+        status: str = Form(""),
+        next_action: str = Form(""),
+        next_action_at: str = Form(""),
+        notes: str = Form(""),
+    ):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        try:
+            app.state.career.update_application(user["id"], application_id, {
+                "status": status,
+                "nextAction": next_action.strip()[:255],
+                "nextActionAt": clean_date(next_action_at),
+                "notes": notes.strip()[:2000],
+            })
+        except ValueError as error:
+            return RedirectResponse("/applications?error=" + quote(str(error)), 303)
+        return RedirectResponse("/applications?message=" + quote("跟进信息已保存。"), 303)
+
+    @app.post("/applications/{application_id}/delete")
+    async def delete_application(request: Request, application_id: str):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        try:
+            app.state.career.delete_application(user["id"], application_id)
+        except ValueError as error:
+            return RedirectResponse("/applications?error=" + quote(str(error)), 303)
+        return RedirectResponse("/applications?message=" + quote("投递记录已删除。"), 303)
+
+    @app.get("/research", response_class=HTMLResponse)
+    async def research_library(request: Request):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        records = app.state.career.list_researches(user["id"])
+        return templates.TemplateResponse(request, "research.html", context(request, records=records))
+
+    @app.get("/research/{research_id}", response_class=HTMLResponse)
+    async def research_detail(request: Request, research_id: str):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        record = app.state.career.research(user["id"], research_id)
+        if not record:
+            return RedirectResponse("/research?error=" + quote("核验记录不存在。"), 303)
+        stored_result = type("StoredResult", (), {
+            "content": record["content"], "sources": record["sources"], "error": "",
+        })()
+        return templates.TemplateResponse(request, "result.html", context(
+            request,
+            result=stored_result,
+            **result_view_values(stored_result, user["id"]),
+            profile=record.get("query", {}),
+            result_title=record["title"],
+            back_url="/research",
+            saved_record=record,
+            stored_view=True,
+        ))
+
+    @app.post("/research/{research_id}/delete")
+    async def delete_research(request: Request, research_id: str):
+        user, redirect = require_user(request)
+        if redirect:
+            return redirect
+        try:
+            app.state.career.delete_research(user["id"], research_id)
+        except ValueError as error:
+            return RedirectResponse("/research?error=" + quote(str(error)), 303)
+        return RedirectResponse("/research?message=" + quote("核验记录已删除。"), 303)
 
     @app.get("/foreign", response_class=HTMLResponse)
     @app.get("/foreign.html", response_class=HTMLResponse)
@@ -114,7 +396,7 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         user_agent = request.headers.get("user-agent", "").lower()
         browser_like = any(token in user_agent for token in ("mozilla", "chrome", "safari", "firefox", "edg"))
         valid_visitor = bool(re.fullmatch(r"[A-Za-z0-9._:-]{12,80}", visitor_id))
-        if page_path not in tracked_pages or not valid_visitor or not browser_like:
+        if not trackable_page(page_path) or not valid_visitor or not browser_like:
             return {"ok": False}
         try:
             app.state.analytics.record(visitor_id, page_path)
@@ -143,18 +425,39 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             "roles": roles[:300], "notes": notes[:1000],
         }
         result = await app.state.research.research_companies(profile)
+        user = current_user(request)
+        saved_record = None
+        if user and not result.error:
+            source_values = [
+                {
+                    "title": str(source.get("title", "公开来源") if isinstance(source, dict) else getattr(source, "title", "公开来源"))[:300],
+                    "url": str(source.get("url", "") if isinstance(source, dict) else getattr(source, "url", ""))[:1200],
+                }
+                for source in result.sources
+            ]
+            saved_record = app.state.career.save_research(user["id"], {
+                "title": f"{profile['city'] or '不限城市'} · {profile['roles'] or profile['identity'] or '机会核验'}"[:200],
+                "query": profile,
+                "content": result.content,
+                "sources": source_values,
+            })
         return templates.TemplateResponse(request, "result.html", context(
-            request, result=result, **result_view_values(result),
-            profile=profile, result_title="企业与岗位核验结果", back_url="/",
+            request, result=result, **result_view_values(result, user["id"] if user else ""),
+            profile=profile, result_title="企业与岗位核验结果", back_url="/discover",
+            saved_record=saved_record, stored_view=False,
         ))
 
     @app.get("/downloads/results/{export_id}.csv")
-    async def download_result_table(export_id: str):
-        content = app.state.result_exports.get(export_id)
-        if not content:
+    async def download_result_table(request: Request, export_id: str):
+        export = app.state.result_exports.get(export_id)
+        if not export:
+            return Response("Export expired or not found.", status_code=404, media_type="text/plain")
+        owner_id = export.get("ownerId", "")
+        user = current_user(request)
+        if owner_id and (not user or user["id"] != owner_id):
             return Response("Export expired or not found.", status_code=404, media_type="text/plain")
         return Response(
-            content,
+            export["content"],
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": 'attachment; filename="job-compass-result.csv"'},
         )
@@ -184,7 +487,7 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             else:
                 result = await app.state.research.analyze_resume(text, {"city": city, "english": english, "roles": roles, "model": model})
         return templates.TemplateResponse(request, "result.html", context(
-            request, result=result, **result_view_values(result),
+            request, result=result, **result_view_values(result, (current_user(request) or {}).get("id", "")),
             profile={}, result_title="简历与岗位方向分析", back_url="/foreign",
         ))
 
@@ -209,12 +512,14 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         pending_comments = [comment for post in posts for comment in post.get("comments", []) if comment["status"] == "pending"]
         forum_summary = app.state.store.summary(admin=True)
         analytics = app.state.analytics.summary()
+        career_summary = app.state.career.admin_summary()
         return templates.TemplateResponse(request, "admin.html", context(
             request,
             pending_posts=pending_posts,
             pending_comments=pending_comments,
             forum_summary=forum_summary,
             analytics=analytics,
+            career_summary=career_summary,
             views_points=chart_points(analytics["daily"], "views"),
             visitors_points=chart_points(analytics["daily"], "visitors"),
         ))

@@ -4,7 +4,7 @@
 {% block content %}
 <main class="admin-workspace">
   <header class="admin-heading">
-    <div><span class="eyebrow">ADMIN CONSOLE</span><h1>管理后台</h1><p>访问趋势与社区内容审核</p></div>
+    <div><span class="eyebrow">ADMIN CONSOLE</span><h1>管理后台</h1><p>真实访问趋势、产品使用情况与社区内容审核</p></div>
     <form method="post" action="/admin/logout"><input type="hidden" name="next" value="/admin" /><button class="quiet-button" type="submit">退出后台</button></form>
   </header>
 
@@ -14,6 +14,10 @@
     <article><span>累计访客</span><strong>{{ analytics.totals.visitors }}</strong><small>独立访客</small></article>
     <article><span>累计浏览</span><strong>{{ analytics.totals.views }}</strong><small>页面浏览次数</small></article>
     <article><span>待审内容</span><strong>{{ forum_summary.pendingPosts + forum_summary.pendingComments }}</strong><small>帖子与评论</small></article>
+    <article><span>注册用户</span><strong>{{ forum_summary.totalUsers }}</strong><small>可登录账号</small></article>
+    <article><span>已建画像</span><strong>{{ career_summary.profiles }}</strong><small>完善过求职偏好</small></article>
+    <article><span>进行中投递</span><strong>{{ career_summary.activeApplications }}</strong><small>用户真实记录</small></article>
+    <article><span>核验清单</span><strong>{{ career_summary.researches }}</strong><small>账号保存结果</small></article>
   </section>
 
   <section class="admin-panel admin-chart-panel">

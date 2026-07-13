@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}职路 · 机会核验{% endblock %}
+{% block content %}
+<main class="product-main">
+  <header class="page-heading">
+    <div><span class="eyebrow">OPPORTUNITY VERIFICATION</span><h1>机会核验</h1><p>把招聘来源、企业情况和岗位条件放在同一份可追溯清单里。</p></div>
+    {% if current_user %}<a class="secondary-command" href="/research">查看核验历史</a>{% else %}<a class="secondary-command" href="/login?next=/discover">登录后保存结果</a>{% endif %}
+  </header>
+
+  <div class="discover-layout">
+    <section class="workspace-section discover-form-section">
+      <div class="section-heading"><div><span class="eyebrow">SEARCH BRIEF</span><h2>填写核验条件</h2></div><span class="state-badge">公开来源 + AI 整理</span></div>
+      <form class="product-form form-grid" method="post" action="/generate" data-loading>
+        <label><span>目标城市</span><input name="city" value="{{ profile.city or '天津市' }}" required /></label>
+        <label><span>求职身份</span><input name="identity" value="{{ profile.identity or '应届毕业生' }}" required /></label>
+        <label><span>年龄</span><input name="age" type="number" min="16" max="65" value="22" /></label>
+        <label><span>目标公司数量</span><input name="count" type="number" min="1" value="10" /></label>
+        <fieldset class="mode-field form-wide">
+          <legend>筛选模式 <small>可同时选择</small></legend>
+          <div class="mode-options">
+            <label><input name="modes" type="checkbox" value="strict" /><span><b>01</b><strong>严格模式</strong><small>成熟企业，条件全部满足</small></span></label>
+            <label><input name="modes" type="checkbox" value="balanced" checked /><span><b>02</b><strong>平衡模式</strong><small>可靠优先，兼顾结果数量</small></span></label>
+            <label><input name="modes" type="checkbox" value="emerging" /><span><b>03</b><strong>新兴企业</strong><small>扩大范围，关注成长公司</small></span></label>
+          </div>
+        </fieldset>
+        <label><span>分析模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
+        <label class="form-wide"><span>岗位偏好</span><input name="roles" value="{{ profile.roles or '' }}" placeholder="例如：AI 产品、人力、供应链、运营" /></label>
+        <label class="form-wide"><span>补充条件</span><textarea name="notes" rows="5" placeholder="可填写专业、学历、通勤范围、行业偏好等要求">{% if profile.major or profile.education or profile.industries %}专业：{{ profile.major }}；学历：{{ profile.education }}；行业：{{ profile.industries }}{% endif %}</textarea></label>
+        <button class="primary-command full form-wide submit-command" type="submit"><span>生成企业与岗位核验清单</span><i class="loading-spinner" aria-hidden="true"></i></button>
+      </form>
+      <p class="form-disclaimer">结果基于本次可检索的公开网页整理。投递前请打开来源链接复核岗位状态与截止时间。</p>
+    </section>
+
+    <aside class="discover-aside">
+      <section class="workspace-section verification-standard">
+        <div class="section-heading"><div><span class="eyebrow">CHECKLIST</span><h2>重点核验什么</h2></div></div>
+        <ol>
+          <li><span>01</span><div><strong>来源是否可信</strong><small>优先企业官网、官方招聘号和公共就业平台</small></div></li>
+          <li><span>02</span><div><strong>岗位是否仍开放</strong><small>核对发布时间、截止日期和投递入口</small></div></li>
+          <li><span>03</span><div><strong>条件是否匹配</strong><small>身份、学历、专业、城市和招聘批次逐项确认</small></div></li>
+          <li><span>04</span><div><strong>风险是否可解释</strong><small>遇到收费、私聊转账和模糊主体时保持警惕</small></div></li>
+        </ol>
+      </section>
+
+      {% if current_user %}
+        <section class="workspace-section compact-history">
+          <div class="section-heading"><div><span class="eyebrow">RECENT</span><h2>最近核验</h2></div><a href="/research">全部</a></div>
+          {% if recent_researches %}
+            <div class="research-list small-list">{% for record in recent_researches %}<a href="/research/{{ record.id }}"><span>{{ record.createdAt[:10] }}</span><strong>{{ record.title }}</strong></a>{% endfor %}</div>
+          {% else %}
+            <div class="empty-state compact-empty"><strong>暂无历史</strong><span>本次生成成功后会自动保存。</span></div>
+          {% endif %}
+        </section>
+      {% else %}
+        <section class="workspace-section save-prompt"><span class="eyebrow">ACCOUNT</span><h2>让结果持续可用</h2><p>登录后，核验表格、检索条件和公开来源会自动保存，并可从个人工作台继续跟进。</p><a class="primary-command full" href="/login?next=/discover">登录或注册</a></section>
+      {% endif %}
+    </aside>
+  </div>
+</main>
+{% endblock %}

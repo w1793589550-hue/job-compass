@@ -3,53 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="职路，应届生企业筛选、外企求职和求职交流工具。" />
-    <title>{% block title %}职路 · 求职信息助手{% endblock %}</title>
+    <meta name="description" content="职路，把机会核验、求职画像、投递进度和经验社区串成一套应届生求职工作流。" />
+    <title>{% block title %}职路 · 求职工作台{% endblock %}</title>
     <link rel="icon" type="image/png" href="/static/brand-logo-v2.png" />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="{% block body_class %}{% endblock %}">
-    <header class="foreign-topbar server-topbar">
-      <a class="foreign-brand" href="/" aria-label="返回职路企业筛选">
-        <img src="/static/brand-logo-v2.png" alt="" />
-        <span><strong>职路</strong><small>Graduate Job Compass</small></span>
-      </a>
-      <nav class="workspace-tabs" aria-label="工作台">
-        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">企业筛选</a>
-        <a href="/foreign" class="{% if request.url.path.startswith('/foreign') %}active{% endif %}">外企求职</a>
-        <a href="/forum" class="{% if request.url.path.startswith('/forum') %}active{% endif %}">求职论坛</a>
-      </nav>
-      <div class="server-account">
-        <a class="admin-entry-link {% if request.url.path.startswith('/admin') %}active{% endif %}" href="/admin" aria-label="打开管理后台">管理后台</a>
-        {% if current_user %}
-          <span class="user-avatar" aria-label="{{ current_user.displayName }}的头像">{{ avatar_initial }}</span>
-          <span class="server-account-name"><strong>{{ current_user.displayName }}</strong><small>{{ role_label }}</small></span>
-          <form method="post" action="/auth/logout">
-            <input type="hidden" name="next" value="{{ request.url.path }}" />
-            <button class="quiet-button compact-button" type="submit">退出</button>
-          </form>
-        {% else %}
-          <details class="login-popover">
-            <summary class="global-user-button"><span aria-hidden="true">用</span><strong>用户登录</strong></summary>
-            <div class="login-popover-panel">
-              <span class="eyebrow">USER ACCESS</span>
-              <h2>登录职路账号</h2>
-              <form method="post" action="/auth/login" class="forum-form">
-                <input type="hidden" name="next" value="{{ request.url.path }}" />
-                <label><span>手机号</span><input name="phone" type="tel" required /></label>
-                <label><span>密码</span><input name="password" type="password" minlength="6" required /></label>
-                <button class="admin-login-button" type="submit">登录</button>
-              </form>
-              <a class="quiet-button register-link" href="/forum#register">没有账号？前往注册</a>
-            </div>
-          </details>
-        {% endif %}
+  <body class="{% block body_class %}product-page{% endblock %}">
+    <header class="product-topbar">
+      <div class="product-topbar-inner">
+        <a class="product-brand" href="/" aria-label="返回职路工作台">
+          <img src="/static/brand-logo-v2.png" alt="" />
+          <span><strong>职路</strong><small>Job Compass</small></span>
+        </a>
+        <nav class="product-nav" aria-label="主要功能">
+          <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">工作台</a>
+          <a href="/discover" class="{% if request.url.path == '/discover' or request.url.path.startswith('/research') or request.url.path == '/generate' %}active{% endif %}">机会核验</a>
+          <a href="/applications" class="{% if request.url.path.startswith('/applications') %}active{% endif %}">投递进度</a>
+          <a href="/foreign" class="{% if request.url.path.startswith('/foreign') %}active{% endif %}">外企简历</a>
+          <a href="/forum" class="{% if request.url.path.startswith('/forum') %}active{% endif %}">求职社区</a>
+        </nav>
+        <div class="product-account">
+          {% if current_user %}
+            <a class="account-link {% if request.url.path == '/profile' %}active{% endif %}" href="/profile">
+              <span class="user-avatar" aria-hidden="true">{{ avatar_initial }}</span>
+              <span><strong>{{ current_user.displayName }}</strong><small>{{ role_label }}</small></span>
+            </a>
+            <form method="post" action="/auth/logout">
+              <input type="hidden" name="next" value="/" />
+              <button class="text-command" type="submit">退出</button>
+            </form>
+          {% else %}
+            <a class="text-command" href="/login">登录</a>
+            <a class="primary-command compact" href="/login?mode=register">注册</a>
+          {% endif %}
+        </div>
       </div>
     </header>
+
     {% if message or error %}
-      <div class="server-notice {% if error %}error{% endif %}" role="status"><span>{{ error or message }}</span><a href="{{ request.url.path }}" aria-label="关闭提示">×</a></div>
+      <div class="server-notice {% if error %}error{% endif %}" role="status">
+        <span>{{ error or message }}</span><a href="{{ request.url.path }}" aria-label="关闭提示">×</a>
+      </div>
     {% endif %}
+
     {% block content %}{% endblock %}
+
+    <footer class="product-footer">
+      <div>
+        <a class="footer-brand" href="/"><img src="/static/brand-logo-v2.png" alt="" /><strong>职路</strong></a>
+        <span>把公开信息核验与个人求职进度放在一个工作台。</span>
+      </div>
+      <nav aria-label="页脚导航">
+        <a href="/privacy">隐私政策</a>
+        <a href="/forum">社区规则</a>
+        <a href="/admin">管理后台</a>
+      </nav>
+    </footer>
+
     {% if track_browser_analytics %}
       <script>
         (() => {
@@ -74,5 +84,14 @@
         })();
       </script>
     {% endif %}
+    <script>
+      document.querySelectorAll("form[data-loading]").forEach((form) => {
+        form.addEventListener("submit", () => {
+          form.classList.add("is-loading");
+          const button = form.querySelector("button[type='submit']");
+          if (button) button.setAttribute("aria-busy", "true");
+        });
+      });
+    </script>
   </body>
 </html>

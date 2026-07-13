@@ -1,115 +1,111 @@
 {% extends "base.html" %}
-{% block title %}职路 · 求职门户{% endblock %}
-{% block body_class %}server-page{% endblock %}
+{% block title %}职路 · 求职工作台{% endblock %}
 {% block content %}
-<main class="foreign-workspace server-workspace career-portal">
-  <section class="career-portal-shell" aria-labelledby="career-portal-title">
-    <aside class="career-portal-nav" aria-label="职路功能导航">
+<main class="product-main">
+  {% if current_user %}
+    <header class="page-heading dashboard-heading">
       <div>
-        <span class="eyebrow">CAREER PORTAL</span>
-        <h1 id="career-portal-title">求职门户工作台</h1>
-        <p>把企业核验、求职画像、论坛交流和结果下载放在同一个入口，减少来回切换。</p>
+        <span class="eyebrow">MY CAREER DESK</span>
+        <h1>{{ current_user.displayName }}的求职工作台</h1>
+        <p>今天先处理最接近截止时间和下一轮流程的事情。</p>
       </div>
-      <nav>
-        <a href="#company-filter"><span>01</span><strong>企业核验</strong><small>按城市、身份、岗位生成清单</small></a>
-        <a href="#career-profile"><span>02</span><strong>画像信息</strong><small>沉淀目标条件和筛选偏好</small></a>
-        <a href="/forum"><span>03</span><strong>求职论坛</strong><small>查看经验帖并发起问题</small></a>
-        <a href="/admin"><span>04</span><strong>管理后台</strong><small>审核帖子、评论和访问趋势</small></a>
-      </nav>
-    </aside>
+      <div class="heading-actions">
+        <a class="secondary-command" href="/applications#new-application">添加投递</a>
+        <a class="primary-command" href="/discover">开始核验</a>
+      </div>
+    </header>
 
-    <div class="career-portal-main">
-      <section class="career-announcement-panel" aria-labelledby="portal-notice-title">
-        <div>
-          <span class="eyebrow">NOTICE</span>
-          <h2 id="portal-notice-title">通知</h2>
-        </div>
-        <ul>
-          <li><strong>2026 届秋招核验提醒</strong><span>优先确认招聘来源、截止时间和工作城市。</span></li>
-          <li><strong>论坛内容审核已启用</strong><span>管理员后台会展示真实浏览器访问数据。</span></li>
-        </ul>
-      </section>
+    <section class="dashboard-metrics" aria-label="求职概览">
+      <a href="/profile"><span>画像完成度</span><strong>{{ profile_completion }}%</strong><small>完善偏好后可直接带入核验</small></a>
+      <a href="/applications"><span>进行中</span><strong>{{ application_summary.active }}</strong><small>{{ application_summary.active }} 个进行中</small></a>
+      <a href="/applications?status=interview"><span>面试阶段</span><strong>{{ application_summary.counts.interview }}</strong><small>集中准备面经与材料</small></a>
+      <a href="/research"><span>核验历史</span><strong>{{ research_count }}</strong><small>最近清单可随时回看</small></a>
+    </section>
 
-      <section class="career-dashboard-grid" aria-label="求职门户概览">
-        <article class="career-panel career-task-panel">
-          <span class="eyebrow">TODO</span>
-          <h2>我的待办任务</h2>
-          <ol>
-            <li><span>完善画像</span><small>补充岗位偏好和通勤范围</small></li>
-            <li><span>生成企业核验清单</span><small>复选严格、平衡、新兴企业模式</small></li>
-            <li><span>下载结果表格</span><small>用于面试准备和投递记录</small></li>
-            <li><span>到论坛提问</span><small>让同学或管理员补充信息</small></li>
+    <div class="dashboard-layout">
+      <section class="workspace-section task-section">
+        <div class="section-heading"><div><span class="eyebrow">NEXT ACTION</span><h2>下一步行动</h2></div><a href="/applications">查看全部</a></div>
+        {% if tasks %}
+          <ol class="task-list">
+            {% for task in tasks %}
+              <li><span>{{ "%02d"|format(loop.index) }}</span><div><strong>{{ task.title }}</strong><small>{{ task.detail }}</small></div><a href="{{ task.href }}">去处理</a></li>
+            {% endfor %}
           </ol>
-        </article>
-
-        <article class="career-panel" id="career-profile">
-          <span class="eyebrow">PROFILE</span>
-          <h2>画像信息</h2>
-          <dl class="career-profile-grid">
-            <div><dt>目标城市</dt><dd>天津市</dd></div>
-            <div><dt>求职身份</dt><dd>应届毕业生</dd></div>
-            <div><dt>岗位偏好</dt><dd>AI、运营、人力</dd></div>
-            <div><dt>筛选模式</dt><dd>支持多选</dd></div>
-          </dl>
-        </article>
-
-        <article class="career-panel career-calendar-panel">
-          <span class="eyebrow">SCHEDULE</span>
-          <h2>求职日程安排</h2>
-          <div class="career-calendar" role="table" aria-label="本周求职日程">
-            <div role="row"><span role="columnheader">周一</span><strong>企业清单复核</strong></div>
-            <div role="row"><span role="columnheader">周二</span><strong>简历方向调整</strong></div>
-            <div role="row"><span role="columnheader">周三</span><strong>论坛提问跟进</strong></div>
-            <div role="row"><span role="columnheader">周四</span><strong>投递记录整理</strong></div>
-            <div role="row"><span role="columnheader">周五</span><strong>面试资料准备</strong></div>
-          </div>
-        </article>
-
-        <article class="career-panel">
-          <span class="eyebrow">DOWNLOAD</span>
-          <h2>常用资料下载</h2>
-          <div class="career-resource-list">
-            <a href="#company-filter"><strong>企业核验表格模板</strong><span>生成后下载</span></a>
-            <a href="#company-filter"><strong>岗位筛选问题库</strong><span>生成清单</span></a>
-            <a href="/forum"><strong>论坛经验与答疑</strong><span>社区内容</span></a>
-          </div>
-        </article>
+        {% else %}
+          <div class="empty-state compact-empty"><strong>当前没有紧急待办</strong><span>可以继续核验新机会，或补充下一步跟进时间。</span><a href="/discover">发现机会</a></div>
+        {% endif %}
       </section>
-    </div>
-  </section>
 
-  <section class="forum-panel server-main-panel career-filter-panel" id="company-filter">
-    <div class="forum-panel-head">
-      <div><span class="eyebrow">PYTHON WORKSPACE</span><h2>企业筛选工作台</h2></div>
-      <span class="forum-state-badge">服务端运行</span>
-    </div>
-    <form class="forum-form server-filter-grid" method="post" action="/generate">
-      <label><span>目标城市</span><input name="city" value="天津市" required /></label>
-      <label><span>求职身份</span><input name="identity" value="应届毕业生" required /></label>
-      <label><span>年龄</span><input name="age" type="number" min="16" max="65" value="22" /></label>
-      <label><span>目标公司数量</span><input name="count" type="number" min="1" value="10" /></label>
-      <fieldset class="server-mode-field server-wide">
-        <legend>筛选模式 <small>支持复选</small></legend>
-        <div class="server-mode-options">
-          <label class="server-mode-option">
-            <input name="modes" type="checkbox" value="strict" />
-            <span><b>01</b><strong>严格模式</strong><small>成熟企业 · 条件全部满足</small></span>
-          </label>
-          <label class="server-mode-option">
-            <input name="modes" type="checkbox" value="balanced" checked />
-            <span><b>02</b><strong>平衡模式</strong><small>可靠优先 · 兼顾结果数量</small></span>
-          </label>
-          <label class="server-mode-option">
-            <input name="modes" type="checkbox" value="emerging" />
-            <span><b>03</b><strong>新兴企业</strong><small>扩大发现 · 关注成长公司</small></span>
-          </label>
+      <section class="workspace-section pipeline-section">
+        <div class="section-heading"><div><span class="eyebrow">PIPELINE</span><h2>投递进度</h2></div><a href="/applications">管理进度</a></div>
+        <div class="pipeline-strip">
+          {% for status in ['planned','applied','assessment','interview','offer'] %}
+            <a href="/applications?status={{ status }}"><span>{{ status_labels[status] }}</span><strong>{{ application_summary.counts[status] }}</strong></a>
+          {% endfor %}
         </div>
-      </fieldset>
-      <label><span>DeepSeek 模型</span><select name="model"><option>deepseek-v4-flash</option><option>deepseek-v4-pro</option></select></label>
-      <label class="server-wide"><span>岗位偏好</span><input name="roles" placeholder="例如：行政、人力、供应链、运营" /></label>
-      <label class="server-wide"><span>补充条件</span><textarea name="notes" rows="4" placeholder="可填写专业、学历、通勤范围等要求"></textarea></label>
-      <button class="generate-button server-wide" type="submit"><span>生成企业核验清单</span><b aria-hidden="true">→</b><i class="submit-spinner" aria-hidden="true"></i><small class="sr-only">正在加载</small></button>
-    </form>
-  </section>
+        {% if applications %}
+          <div class="recent-application-list">
+            {% for item in applications[:4] %}
+              <article><div><strong>{{ item.company }}</strong><span>{{ item.role }}{% if item.city %} · {{ item.city }}{% endif %}</span></div><small class="status-pill status-{{ item.status }}">{{ status_labels[item.status] }}</small></article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state compact-empty"><strong>暂无投递记录</strong><span>把准备投递的企业加入进度看板，截止时间就不会散落在聊天和表格里。</span><a href="/applications#new-application">添加第一条</a></div>
+        {% endif %}
+      </section>
+
+      <section class="workspace-section research-section">
+        <div class="section-heading"><div><span class="eyebrow">VERIFICATION</span><h2>最近核验</h2></div><a href="/research">全部历史</a></div>
+        {% if recent_researches %}
+          <div class="research-list">
+            {% for record in recent_researches %}
+              <a href="/research/{{ record.id }}"><span>{{ record.createdAt[:10] }}</span><strong>{{ record.title }}</strong><small>查看来源与核验表格</small></a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state compact-empty"><strong>还没有核验历史</strong><span>完成一次机会核验后，结果和公开来源会自动保存到账号。</span><a href="/discover">开始首次核验</a></div>
+        {% endif %}
+      </section>
+
+      <aside class="workspace-section profile-snapshot">
+        <div class="section-heading"><div><span class="eyebrow">PROFILE</span><h2>求职画像</h2></div><a href="/profile">编辑</a></div>
+        <div class="completion-track" aria-label="画像完成度 {{ profile_completion }}%"><i style="width: {{ profile_completion }}%"></i></div>
+        <dl>
+          <div><dt>目标城市</dt><dd>{{ profile.city or '待补充' }}</dd></div>
+          <div><dt>毕业身份</dt><dd>{{ profile.identity or '待补充' }}</dd></div>
+          <div><dt>目标岗位</dt><dd>{{ profile.roles or '待补充' }}</dd></div>
+          <div><dt>目标行业</dt><dd>{{ profile.industries or '待补充' }}</dd></div>
+        </dl>
+      </aside>
+    </div>
+  {% else %}
+    <section class="public-start">
+      <div class="public-start-copy">
+        <span class="eyebrow">GRADUATE JOB COMPASS</span>
+        <h1>从核验机会到拿到 offer，<br />把每一步放进同一个工作台</h1>
+        <p>公开来源核验、求职画像、投递进度和经验社区彼此联动。登录后，结果会成为你的求职历史，而不是看完即丢的一张页面。</p>
+        <div class="heading-actions">
+          <a class="primary-command" href="/login?mode=register">建立我的工作台</a>
+          <a class="secondary-command" href="/discover">先核验一个机会</a>
+        </div>
+      </div>
+      <div class="public-system-map" aria-label="职路求职流程">
+        <span>01</span><div><strong>机会核验</strong><small>检索招聘来源、企业情况与截止时间</small></div>
+        <span>02</span><div><strong>投递进度</strong><small>管理待投递、笔试、面试与 offer</small></div>
+        <span>03</span><div><strong>求职社区</strong><small>用经验与事实补足公开信息</small></div>
+        <span>04</span><div><strong>个人资产</strong><small>画像、记录和核验历史持续沉淀</small></div>
+      </div>
+    </section>
+
+    <section class="public-workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><div><span class="eyebrow">ONE WORKFLOW</span><h2 id="workflow-title">不是工具拼盘，是一条连续的求职流程</h2></div></div>
+      <div>
+        <article><b>发现</b><h3>按真实条件筛选企业</h3><p>城市、身份、岗位和企业类型都可复选，结果保留公开来源。</p><a href="/discover">进入机会核验</a></article>
+        <article><b>判断</b><h3>把简历与目标方向对齐</h3><p>外企求职模块只在本次请求中读取简历，不保存简历正文。</p><a href="/foreign">分析简历方向</a></article>
+        <article><b>推进</b><h3>把机会变成可跟进任务</h3><p>登录后记录阶段、截止日期和下一步行动，首页自动汇总。</p><a href="/login?next=/applications">登录后使用</a></article>
+        <article><b>验证</b><h3>从社区补充真实经验</h3><p>帖子和评论先审后发，管理员处理举报并查看真实访问数据。</p><a href="/forum">浏览求职社区</a></article>
+      </div>
+    </section>
+  {% endif %}
 </main>
 {% endblock %}
