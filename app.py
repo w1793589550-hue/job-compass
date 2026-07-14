@@ -503,10 +503,16 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
             request, roles=ROLES, posts=posts, summary=summary, filters=filters,
         ))
 
+    @app.get("/admin/login", response_class=HTMLResponse)
+    async def admin_login_page(request: Request):
+        response = templates.TemplateResponse(request, "admin_login.html", context(request))
+        response.delete_cookie(ADMIN_COOKIE)
+        return response
+
     @app.get("/admin", response_class=HTMLResponse)
     async def admin_dashboard(request: Request):
         if not admin_mode(request):
-            return templates.TemplateResponse(request, "admin_login.html", context(request))
+            return RedirectResponse("/admin/login", 303)
         posts = app.state.store.list_posts(admin=True)
         pending_posts = [post for post in posts if post["status"] == "pending"]
         pending_comments = [comment for post in posts for comment in post.get("comments", []) if comment["status"] == "pending"]
@@ -584,7 +590,13 @@ def create_app(data_file: Path | None = None, testing: bool = False) -> FastAPI:
         if not valid:
             return RedirectResponse(f"{destination}?error={quote('管理员密码错误。')}", 303)
         response = RedirectResponse(f"{destination}?message={quote('已进入管理员审核模式。')}", 303)
-        response.set_cookie(ADMIN_COOKIE, sign_session("admin", app.state.session_secret, 12 * 3600), max_age=12 * 3600, httponly=True, samesite="lax", secure=request.url.scheme == "https")
+        response.set_cookie(
+            ADMIN_COOKIE,
+            sign_session("admin", app.state.session_secret, 12 * 3600),
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+        )
         return response
 
     @app.post("/admin/logout")

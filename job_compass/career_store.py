@@ -4,8 +4,6 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-import pymysql
-
 
 APPLICATION_STATUSES = (
     "planned",
@@ -229,10 +227,13 @@ class JsonCareerStore:
 
 class MySqlCareerStore:
     def __init__(self, config: dict):
+        import pymysql
+
+        self._db = pymysql
         self.config = {**config, "charset": "utf8mb4", "cursorclass": pymysql.cursors.DictCursor, "autocommit": True}
 
     def _connect(self):
-        return pymysql.connect(**self.config)
+        return self._db.connect(**self.config)
 
     @staticmethod
     def _profile(row: dict | None, user_id: str) -> dict:

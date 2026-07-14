@@ -4,8 +4,6 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
-import pymysql
-
 from .forum_store import mask_phone, normalize_phone
 from hashlib import sha256
 
@@ -47,12 +45,15 @@ def _iso(value) -> str | None:
 
 class MySqlForumStore:
     def __init__(self, config: dict, schema_path: Path, phone_hash_secret: str = ""):
+        import pymysql
+
+        self._db = pymysql
         self.config = {**config, "charset": "utf8mb4", "cursorclass": pymysql.cursors.DictCursor, "autocommit": True}
         self.phone_hash_secret = phone_hash_secret
         self._ensure_schema(schema_path)
 
     def _connect(self):
-        return pymysql.connect(**self.config)
+        return self._db.connect(**self.config)
 
     def _ensure_schema(self, schema_path: Path) -> None:
         statements = [part.strip() for part in schema_path.read_text(encoding="utf-8").split(";") if part.strip()]
@@ -101,7 +102,7 @@ class MySqlForumStore:
                     "INSERT INTO forum_users (id, phone_hash, phone_masked, password_hash, display_name, role, disabled, created_at) VALUES (%s,%s,%s,%s,%s,%s,FALSE,%s)",
                     (user["id"], user["phoneHash"], user["phoneMasked"], password_hash, display_name, role, datetime.now(timezone.utc)),
                 )
-        except pymysql.err.IntegrityError as error:
+        except self._db.err.IntegrityError as error:
             if error.args and error.args[0] == 1062:
                 raise ValueError("该手机号已经注册，请直接登录。") from error
             raise

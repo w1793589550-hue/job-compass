@@ -371,6 +371,31 @@ class WebAuthenticationTests(unittest.TestCase):
         self.assertIn("后台待审核帖子", dashboard.text)
         self.assertIn("<svg", dashboard.text)
 
+    def test_admin_portal_always_reauthenticates_and_uses_a_session_cookie(self):
+        response = self.client.post(
+            "/admin/login",
+            data={"password": "wang1122lu87", "next": "/admin"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertNotIn("Max-Age=", response.headers["set-cookie"])
+        self.assertNotIn("expires=", response.headers["set-cookie"].lower())
+
+        dashboard = self.client.get("/admin")
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn("管理后台", dashboard.text)
+        self.assertNotIn("管理员后台登录", dashboard.text)
+
+        login_page = self.client.get("/admin/login")
+        self.assertEqual(login_page.status_code, 200)
+        self.assertIn("管理员后台登录", login_page.text)
+        self.assertIn("Max-Age=0", login_page.headers["set-cookie"])
+
+        locked_dashboard = self.client.get("/admin")
+        self.assertEqual(locked_dashboard.status_code, 200)
+        self.assertIn("管理员后台登录", locked_dashboard.text)
+
     def test_mysql_url_is_parsed_for_python_storage_adapter(self):
         config = mysql_config_from_env({"MYSQL_URL": "mysql://demo:p%40ss@db.example:3307/job_compass"})
 

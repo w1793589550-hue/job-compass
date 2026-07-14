@@ -4,8 +4,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import pymysql
-
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -114,10 +112,13 @@ class JsonAnalyticsStore:
 
 class MySqlAnalyticsStore:
     def __init__(self, config: dict):
+        import pymysql
+
+        self._db = pymysql
         self.config = {**config, "charset": "utf8mb4", "cursorclass": pymysql.cursors.DictCursor, "autocommit": True}
 
     def _connect(self):
-        return pymysql.connect(**self.config)
+        return self._db.connect(**self.config)
 
     def record(self, visitor_id: str, page_path: str, now: datetime | None = None) -> None:
         instant = (now or _now()).replace(tzinfo=None)
